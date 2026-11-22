@@ -349,6 +349,9 @@ test('light mode colours', async ({ page }) => {
 
 test('3000 log rows: every tab renders in under 400 ms', async ({ page }) => {
   await open(page, 'seed=demo&rows=3000');
+  // Warm the engine once (fonts, first layout), then time a full data refresh + render of each tab.
+  for (const t of ['add', 'meds', 'stock', 'week', 'shop', 'today']) await tab(page, t).click();
+  await page.evaluate(() => document.fonts.ready);
   for (const t of ['add', 'meds', 'stock', 'week', 'shop', 'today']) {
     const ms = await page.evaluate(async (name) => {
       const t0 = performance.now();
