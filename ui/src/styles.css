@@ -300,11 +300,18 @@ details > summary::-webkit-details-marker { display: none; }
 }
 .layout-switcher button { min-height: 30px; padding: 4px 10px; font-size: 13px; border: 0; }
 .layout-switcher button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
-.strip { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 3px; }
-.strip-day { flex-direction: column; gap: 0; padding: 4px 0; min-height: 44px; min-width: 0; border-color: transparent; background: transparent; }
+.strip-bar { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.strip-track { flex: 1; min-width: 0; display: flex; gap: 2px; overflow-x: auto; scroll-behavior: smooth; scrollbar-width: none; padding: 2px 0; }
+.strip-track::-webkit-scrollbar { display: none; }
+.strip-day { flex: 0 0 auto; width: 38px; flex-direction: column; gap: 0; padding: 4px 0; min-height: 46px; border: 1px solid transparent; background: transparent; border-radius: 10px; }
+.strip-dow { font-size: 11px; color: var(--muted); font-weight: 600; }
+.strip-day.month-start .strip-dow { color: var(--accent); }
 .strip-day[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
-.strip-day[aria-pressed="true"] .muted { color: inherit; }
-.day-strip { padding: 8px; }
+.strip-day[aria-pressed="true"] .strip-dow { color: inherit; }
+.strip-day.is-today { width: 54px; border-color: var(--accent); }
+.strip-day.is-today .strip-dow { color: var(--accent); }
+.strip-day.is-today[aria-pressed="true"] .strip-dow { color: inherit; }
+.day-nav-strip { padding: 6px; }
 .add-inline textarea { min-height: 56px; }
 .journal-wrap { display: flex; flex-direction: column; gap: 14px; max-width: 760px; width: 100%; }
 .journal { display: flex; flex-direction: column; gap: 12px; }
@@ -315,8 +322,6 @@ details > summary::-webkit-details-marker { display: none; }
 .med-chip.missed { border-color: var(--over); color: var(--over); }
 .list-date { padding-top: 12px !important; }
 @media (max-width: 759px) {
-  .strip { grid-template-columns: repeat(7, minmax(0, 1fr)); }
-  .strip-day:nth-child(-n+7) { display: none; }
   .layout-switcher { bottom: 70px; }
 }
 

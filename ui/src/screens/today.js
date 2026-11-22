@@ -19,9 +19,9 @@ let opts = {};
 /** opts.strip: show a 14-day calendar strip; opts.addPanel: a panel mounted above Food. */
 function mount(root, o = {}) {
   opts = o;
-  els.strip = h('div', { class: 'card day-strip hidden', 'aria-label': 'Jump to a day' });
+  els.strip = h('div', { class: 'hidden' });
   els.addSlot = h('div', { class: 'col' });
-  els.nav = h('div', { class: 'card' });
+  els.nav = h('div', { class: opts.strip ? 'card day-nav-strip' : 'card' });
   els.energy = h('div', { class: 'card', 'aria-label': 'Energy and protein' });
   els.plan = h('div', { class: 'card hidden', 'aria-label': 'Planned meals' });
   els.food = h('div', { class: 'card', 'aria-label': 'Food logged' });
@@ -47,21 +47,48 @@ async function refresh(o = {}) {
   if (opts.strip) renderStrip();
 }
 
+/** One bar: ‹  scrolling days  [Today, pinned]  ›. The selected day is always scrolled into view. */
 function renderStrip() {
-  els.strip.classList.remove('hidden');
-  const end = day.today;
-  const days = [];
-  for (let i = 13; i >= 0; i--) days.push(shift(end, -i));
+  const d = day;
   const L = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  // Four weeks back, or further if you've stepped back past that (plus a week before it).
+  const span = Math.max(27, Math.round((new Date(d.today) - new Date(d.date)) / 864e5) + 7);
+  const days = [];
+  for (let i = span; i >= 1; i--) days.push(shift(d.today, -i));
+  const dayBtn = (x, isToday = false) => {
+    const [y, m, dd] = x.split('-').map(Number);
+    const dow = new Date(y, m - 1, dd).getDay();
+    return h('button', {
+      type: 'button',
+      class: `strip-day ${isToday ? 'is-today' : ''} ${dd === 1 ? 'month-start' : ''}`,
+      'data-date': x,
+      'aria-pressed': String(x === d.date),
+      'aria-label': isToday ? 'Today' : dayLabel(x, d.today),
+      onclick: () => setDate(x),
+    },
+    h('span', { class: 'strip-dow', text: isToday ? 'Today' : dd === 1 ? MON[m - 1] : L[dow] }),
+    h('b', { class: 'num', text: String(dd) }));
+  };
+  const track = h('div', { class: 'strip-track', role: 'group', 'aria-label': 'Days' }, days.map((x) => dayBtn(x)));
   fill(
-    els.strip,
-    h('div', { class: 'strip' }, days.map((d) => {
-      const [y, m, dd] = d.split('-').map(Number);
-      const dow = new Date(y, m - 1, dd).getDay();
-      return h('button', { type: 'button', class: 'strip-day', 'aria-pressed': String(d === state.date), 'aria-label': dayLabel(d, day.today), onclick: () => setDate(d) },
-        h('span', { class: 'small muted', text: L[dow] }), h('b', { class: 'num', text: String(dd) }));
-    })),
+    els.nav,
+    h('div', { class: 'strip-bar' },
+      iconButton('left', 'Previous day', () => setDate(shift(d.date, -1)), 'icon'),
+      track,
+      dayBtn(d.today, true),
+      h('button', { class: 'icon', type: 'button', 'aria-label': 'Next day', title: 'Next day', disabled: d.isToday, onclick: () => setDate(shift(d.date, 1)) }, icon('right'))),
   );
+  // Scroll the track (not the page) so the selected day sits near the right edge, or show the latest days.
+  requestAnimationFrame(() => {
+    const sel = track.querySelector('[aria-pressed="true"]');
+    track.scrollLeft = sel ? Math.max(0, sel.offsetLeft - track.clientWidth + sel.offsetWidth * 3) : track.scrollWidth;
+  });
+  const chip = document.getElementById('date-chip');
+  if (chip) {
+    const [y, m, dd] = d.date.split('-').map(Number);
+    chip.textContent = new Date(y, m - 1, dd).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', ...(y !== new Date().getFullYear() ? { year: 'numeric' } : {}) }) + (d.isToday ? '' : ' · not today');
+  }
 }
 
 function setDate(d) {
@@ -78,7 +105,7 @@ function shift(dateStr, n) {
 
 function render() {
   const d = day;
-  fill(
+  if (!opts.strip) fill(
     els.nav,
     h(
       'div',

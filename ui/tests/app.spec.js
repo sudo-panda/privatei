@@ -569,3 +569,22 @@ test('Open Food Facts: look up packaged products online, then log one', async ({
   await page.locator('#open-settings').click();
   await expect(page.locator('[data-source="off"]')).toContainText('Open Food Facts');
 });
+
+test('Log date bar: scrolls to the selected day, Today pinned and outlined', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&hhmm=12:00');
+  const todayBtn = page.locator('.strip-day.is-today');
+  await expect(todayBtn).toHaveAttribute('aria-pressed', 'true');
+  for (let i = 0; i < 45; i++) await page.getByLabel('Previous day').click();
+  const sel = page.locator('.strip-track [aria-pressed="true"]');
+  await expect(sel).toHaveAttribute('data-date', '2026-10-08');
+  await expect(sel).toBeInViewport();
+  await expect(todayBtn).toBeInViewport(); // never scrolled away
+  await expect(todayBtn).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#date-chip')).toContainText('not today');
+  await todayBtn.click();
+  await expect(todayBtn).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Next day')).toBeDisabled();
+  // One combined bar: no separate date card.
+  await expect(page.locator('#day-label')).toHaveCount(0);
+});

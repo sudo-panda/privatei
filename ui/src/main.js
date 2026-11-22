@@ -127,6 +127,7 @@ function show(id, opts = {}) {
   }
   current = s;
   title.textContent = s.title;
+  if (s.id !== 'today') updateDateChip();
   main.scrollTop = 0;
   return s.refresh(opts);
 }
@@ -146,7 +147,7 @@ onChange(() => {
 
 async function rollDay() {
   const t = await quiet('today');
-  queueMicrotask(updateDateChip);
+  queueMicrotask(() => { if (current?.id !== 'today') updateDateChip(); });
   if (t !== state.today) {
     const wasToday = state.date === state.today;
     state.today = t;
