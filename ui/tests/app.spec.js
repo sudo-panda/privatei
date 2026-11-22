@@ -243,25 +243,43 @@ test('Shop: budget, check what you have, move back, bought it', async ({ page })
   await expect(page.locator('#screen-stock .card[aria-label="Fridge"]')).toContainText('2 packs');
 });
 
-test('Settings: validation, AI test, learned foods, backup and restore', async ({ page }) => {
+test('Settings page: autosaved targets, model dropdowns, key, AI test, learned foods, backup, updates', async ({ page }) => {
   await open(page);
-  await page.getByLabel('Settings').click();
+  await page.locator('#open-settings').click();
+  await expect(page.locator('#title')).toHaveText('Settings');
+  const targets = page.locator('#targets-status');
   await page.locator('#set-weight').fill('20');
-  await page.getByRole('button', { name: 'Save targets' }).click();
-  await expect(page.locator('.sheet .error').first()).toHaveText('Weight must be between 30 and 300 kg.');
+  await page.locator('#set-weight').press('Tab');
+  await expect(targets).toHaveText('Weight must be between 30 and 300 kg.');
   await page.locator('#set-weight').fill('80');
-  await page.getByRole('button', { name: 'Save targets' }).click();
-  await expect(page.locator('.toast').last()).toHaveText('Targets saved');
+  await page.locator('#set-weight').press('Tab');
+  await expect(targets).toHaveText('Saved');
+  expect(await page.evaluate(() => window.__mock.settings.weightKg)).toBe(80);
+
+  const st = page.getByTestId('ai-status');
+  await page.locator('#ai-cmodel').selectOption('opus');
+  await expect(st).toHaveText('Saved');
+  expect(await page.evaluate(() => window.__mock.ai.claudeModel)).toBe('opus');
+  await page.locator('#ai-gmodel').selectOption('__custom');
+  await expect(page.locator('#ai-gmodel-custom')).toBeVisible();
+  await page.locator('#ai-gmodel-custom').fill('bad model!');
+  await page.locator('#ai-gmodel-custom').press('Tab');
+  await expect(st).toContainText('Model names may only use');
+  await page.locator('#ai-gmodel-custom').fill('gemini-2.5-flash');
+  await page.locator('#ai-gmodel-custom').press('Tab');
+  await expect(st).toHaveText('Saved');
+  expect(await page.evaluate(() => window.__mock.ai.geminiModel)).toBe('gemini-2.5-flash');
+  await page.locator('#ai-order').selectOption('gemini,claude');
+  await expect.poll(() => page.evaluate(() => window.__mock.ai.order.join(','))).toBe('gemini,claude');
 
   await expect(page.locator('#ai-key')).toHaveAttribute('type', 'password');
   await page.locator('#ai-key').fill('test-key');
-  await page.locator('#ai-gmodel').fill('bad model!');
-  await page.getByRole('button', { name: 'Test the AI' }).click();
-  await expect(page.getByTestId('ai-status')).toContainText('Model names may only use');
-  await page.locator('#ai-gmodel').fill('gemini-flash-latest');
-  await page.getByRole('button', { name: 'Test the AI' }).click();
-  await expect(page.getByTestId('ai-status')).toHaveText('Claude answered. AI is working.');
+  await page.getByRole('button', { name: 'Save key' }).click();
+  await expect(page.getByText('Key saved')).toBeVisible();
   expect(await page.evaluate(() => window.__mock.ai.geminiKey)).toBe('test-key');
+
+  await page.getByRole('button', { name: 'Test the AI' }).click();
+  await expect(st).toHaveText('Claude answered. AI is working.');
 
   await page.getByLabel('Forget Protein pudding').click();
   await expect(page.locator('#learned')).toContainText('Foods the AI works out');
@@ -270,6 +288,10 @@ test('Settings: validation, AI test, learned foods, backup and restore', async (
   await expect(page.locator('.toast').last()).toHaveText('Backup saved');
   await page.getByRole('button', { name: 'Restore / import…' }).click();
   await expect(page.locator('.toast').last()).toHaveText('Imported 3 records');
+
+  await expect(page.locator('.set-section[aria-label="Updates"]')).toContainText('Version 0.4.0');
+  await page.getByRole('button', { name: 'Check for updates' }).click();
+  await expect(page.locator('#update-status')).toHaveText('You’re up to date.');
 });
 
 test('Rules chat shows a diff and saves only on Apply', async ({ page }) => {
@@ -286,7 +308,7 @@ test('Rules chat shows a diff and saves only on Apply', async ({ page }) => {
 
 test('Sheets close on Escape and on the backdrop', async ({ page }) => {
   await open(page);
-  await page.getByLabel('Settings').click();
+  await page.getByRole('button', { name: 'Add training' }).click();
   await expect(page.locator('.sheet')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('.sheet')).toHaveCount(0);
@@ -301,15 +323,16 @@ test('Failed saves show a short message', async ({ page }) => {
   await page.getByRole('button', { name: 'Add to list' }).click();
   await expect(page.locator('.card .error').first()).toHaveText('Name the item.');
   await page.evaluate(() => (window.__mock.aiAvailable = false));
-  await page.getByLabel('Settings').click();
+  await page.locator('#open-settings').click();
   await page.getByRole('button', { name: 'Test the AI' }).click();
   await expect(page.getByTestId('ai-status')).toContainText('No AI is set up');
 });
 
 test('All buttons have accessible names', async ({ page }) => {
   await open(page);
-  for (const t of ['today', 'add', 'meds', 'stock', 'week', 'shop']) {
-    await tab(page, t).click();
+  for (const t of ['today', 'add', 'meds', 'stock', 'week', 'shop', 'settings']) {
+    if (t === 'settings') await page.locator('#open-settings').click();
+    else await tab(page, t).click();
     const unnamed = await page.evaluate(() =>
       [...document.querySelectorAll('button')].filter((b) => b.offsetParent !== null && !(b.getAttribute('aria-label') || b.textContent.trim())).length,
     );
@@ -325,9 +348,9 @@ test('360 px wide: no sideways scrolling on any screen', async ({ page }) => {
     const w = await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, document.getElementById('main').scrollWidth));
     expect(w, `scroll width on ${t}`).toBeLessThanOrEqual(360);
   }
-  await page.getByLabel('Settings').click();
-  const sw = await page.evaluate(() => document.querySelector('.sheet').scrollWidth);
-  expect(sw).toBeLessThanOrEqual(360);
+  await page.locator('#open-settings').click();
+  const sw = await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.getElementById('main').scrollWidth));
+  expect(sw, 'scroll width on settings').toBeLessThanOrEqual(360);
 });
 
 test.describe('dark mode', () => {
@@ -390,6 +413,8 @@ test('Desktop layout: sidebar, columns, shortcuts, no sideways scroll', async ({
   await page.keyboard.press('ControlOrMeta+n');
   await expect(page.locator('#describe')).toBeFocused();
   await page.keyboard.press('ControlOrMeta+,');
+  await expect(page.locator('#title')).toHaveText('Settings');
+  await page.keyboard.press('ControlOrMeta+k');
   const dlg = await page.locator('.sheet').boundingBox();
   expect(dlg.y).toBeGreaterThan(10); // centered dialog, not a bottom sheet
   expect(dlg.y + dlg.height).toBeLessThan(800 - 10);

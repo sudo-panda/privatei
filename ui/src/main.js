@@ -20,10 +20,12 @@ import meds from './screens/meds.js';
 import stock from './screens/stock.js';
 import week from './screens/week.js';
 import shop from './screens/shop.js';
-import { openSettings } from './screens/settings.js';
+import settings, { openSettings } from './screens/settings.js';
+import { checkOnLaunch } from './update.js';
 import { openRules } from './screens/rules.js';
 
-const screens = [today, add, meds, stock, week, shop];
+const screens = [today, add, meds, stock, week, shop, settings];
+const tabbed = screens.filter((s) => !s.noTab);
 const main = document.getElementById('main');
 const tabs = document.getElementById('tabs');
 const title = document.getElementById('title');
@@ -33,6 +35,7 @@ const MAC = /Mac/.test(navigator.platform || navigator.userAgent);
 screens.forEach((s, i) => {
   s.el = h('section', { class: 'screen hidden', id: `screen-${s.id}`, 'aria-label': s.title });
   main.append(s.el);
+  if (s.noTab) return;
   s.tab = h(
     'button',
     { type: 'button', 'data-tab': s.id, 'aria-label': s.title, title: `${s.title} (${MAC ? '⌘' : 'Ctrl+'}${i + 1})`, onclick: () => show(s.id) },
@@ -57,7 +60,7 @@ document.addEventListener('keydown', (e) => {
   if (mod && !e.shiftKey && !e.altKey) {
     if (/^[1-6]$/.test(e.key) && !anySheetOpen()) {
       e.preventDefault();
-      show(screens[Number(e.key) - 1].id);
+      show(tabbed[Number(e.key) - 1].id);
     } else if (e.key === ',' && !anySheetOpen()) {
       e.preventDefault();
       openSettings();
@@ -87,6 +90,7 @@ function show(id, opts = {}) {
   }
   for (const x of screens) {
     x.el.classList.toggle('hidden', x !== s);
+    if (!x.tab) continue;
     if (x === s) x.tab.setAttribute('aria-current', 'page');
     else x.tab.removeAttribute('aria-current');
   }
@@ -139,6 +143,7 @@ async function start() {
     };
   }
   document.body.dataset.ready = '1';
+  setTimeout(checkOnLaunch, 3000);
 }
 
 start();

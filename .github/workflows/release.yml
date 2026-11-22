@@ -33,6 +33,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_SIGNING_IDENTITY: "-"
+          # Signs the update bundle so installed apps only accept builds made here.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           projectPath: apps/desktop
           tauriScript: npx tauri
@@ -41,6 +44,7 @@ jobs:
           releaseName: PrivateI v__VERSION__
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: true
           releaseBody: |
             PrivateI for Macs with Apple Silicon (M1 or newer).
 
@@ -53,5 +57,7 @@ jobs:
                xattr -dr com.apple.quarantine /Applications/PrivateI.app
                ```
             4. Open PrivateI from Applications.
+
+            From v0.4.0 on, PrivateI checks for updates itself and installs them when you say so.
 
             Your data stays on your Mac (in `~/Library/Application Support/app.privatei.desktop`).

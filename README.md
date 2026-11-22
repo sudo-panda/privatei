@@ -6,7 +6,7 @@ don't know, and the house-rules chat.
 
 ## Install (Apple Silicon Mac)
 
-1. Open the latest release: **GitHub → Releases** in this repo.
+1. Open the latest release: https://github.com/sudo-panda/privatei/releases/latest
 2. Download `PrivateI_<version>_aarch64.dmg`, open it, and drag **PrivateI** into **Applications**.
 3. The app is ad-hoc signed (not notarised), so run this once in Terminal:
 
@@ -15,6 +15,11 @@ don't know, and the house-rules chat.
    ```
 
 4. Open PrivateI from Applications.
+
+From v0.4.0 on, PrivateI updates itself: when a new version is out it shows
+“PrivateI x.y.z is available” — press **Install and restart**. You can also check in
+**Settings → Updates**. Updates are signed, and the app only installs builds signed with
+this project's key.
 
 ## First run
 

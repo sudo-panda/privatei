@@ -433,6 +433,8 @@ const handlers = {
   export_to: ({ path }) => { db.lastExport = path; },
   import_from: () => 3,
   'plugin:dialog|save': () => '/tmp/privatei-backup.json',
+  'plugin:app|version': () => '0.4.0',
+  'plugin:updater|check': () => null,
   'plugin:dialog|open': () => '/tmp/larder-data.json',
 };
 

@@ -69,6 +69,13 @@ Useful URL params for the mock build: `?seed=demo`, `?rows=3000`, `?today=YYYY-M
    (`signingIdentity: "-"`), and publishes a GitHub Release with the `.dmg`.
    It can also be started by hand (workflow_dispatch).
 
+Auto-update: `tauri-plugin-updater` reads
+`https://github.com/sudo-panda/privatei/releases/latest/download/latest.json` (written by
+tauri-action). Update bundles are signed with the key in the `TAURI_SIGNING_PRIVATE_KEY`
+repo secret; the public half is `plugins.updater.pubkey` in `tauri.conf.json`. The owner's
+copy of the private key is `~/.tauri/privatei.key` — if it's lost, installed apps can't
+accept new updates and need one manual reinstall with a new key.
+
 Release profile: `lto = true`, `opt-level = "s"`, `codegen-units = 1`, `strip = true`
 (but not for build scripts/proc macros — stripping those dylibs breaks them on macOS).
 
