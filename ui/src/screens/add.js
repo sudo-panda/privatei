@@ -1,6 +1,6 @@
 import { h, fill, iconButton, toast, n0, n1, dayLabel, chipGroup } from '../dom.js';
 import { call, quiet, message } from '../api.js';
-import { state, go } from '../state.js';
+import { state, go, changed } from '../state.js';
 
 const MEALS = ['Breakfast', 'Lunch', 'Snack', 'Dinner'];
 let els = {};
@@ -12,7 +12,8 @@ function guessMeal() {
   return m < 630 ? 'Breakfast' : m < 870 ? 'Lunch' : m < 1050 ? 'Snack' : 'Dinner';
 }
 
-function mount(root) {
+function mount(root, o = {}) {
+  els.compact = !!o.compact;
   els.target = h('div', { class: 'small muted', 'data-testid': 'log-target' });
   els.recent = h('div', { class: 'chips', 'aria-label': 'Recent foods' });
   const recentCard = h('div', { class: 'card' }, h('div', { class: 'row spread' }, h('h3', { text: 'Recent' }), els.target), els.recent);
@@ -69,6 +70,20 @@ function mount(root) {
 
   els.draft = h('div', { class: 'card hidden', id: 'draft', 'aria-label': 'Draft' });
 
+  if (o.compact) {
+    // Inline on a day: one "Add food" card; typing numbers by hand is tucked away.
+    const manual = manualCard();
+    manual.classList.remove('card');
+    manual.querySelector('h2').remove();
+    root.append(
+      h('div', { class: 'card add-inline', 'aria-label': 'Add food' },
+        h('div', { class: 'row spread' }, h('h2', { text: 'Add food' }), els.target),
+        els.recent, text, h('div', { class: 'grid2' }, work, photoBtn), photoInput, els.status,
+        h('details', { class: 'set-more' }, h('summary', { class: 'small', text: 'Type the numbers myself' }), manual)),
+      els.draft,
+    );
+    return;
+  }
   root.append(h('div', { class: 'cols' }, h('div', { class: 'col' }, describeCard, els.draft), h('div', { class: 'col' }, recentCard, manualCard())));
 }
 
@@ -131,7 +146,7 @@ function renderDraft() {
           toast(`Saved ${n} item${n === 1 ? '' : 's'}`);
           setDraft(null);
           document.getElementById('describe').value = '';
-          refresh();
+          changed();
         },
       }, 'Save'),
     ),
@@ -188,7 +203,7 @@ function manualCard() {
       for (const i of [name, grams, kcal, prot]) i.value = '';
       edited = { kcal: false, prot: false };
       hint.textContent = '';
-      refresh();
+      changed();
     },
   }, 'Log it');
   els.names = list;
@@ -221,7 +236,7 @@ async function refresh(opts = {}) {
             onclick: async () => {
               await call('add_log', { date: state.date, entry: { meal: '', name: r.name, grams: r.grams, kcal: r.kcal, prot: r.prot, est: r.est } });
               toast(`Logged ${r.name}`);
-              refresh();
+              changed();
             },
           }, h('span', { text: r.name })),
         )

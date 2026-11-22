@@ -87,6 +87,17 @@ pub struct WorkoutRow {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkoutEntry {
+    pub id: String,
+    pub date: String,
+    pub kind: String,
+    pub mins: f64,
+    pub kcal: f64,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DayView {
     pub date: String,
     pub today: String,
@@ -1077,6 +1088,23 @@ impl Core {
         };
         self.store.put(&id, w)?;
         Ok(id)
+    }
+
+    /// The most recent training sessions, newest first.
+    pub fn recent_workouts(&self, limit: usize) -> Vec<WorkoutEntry> {
+        let mut v: Vec<(&String, &Workout)> = self.store.all::<Workout>().collect();
+        v.sort_by(|a, b| (&b.1.date, b.1.ts).cmp(&(&a.1.date, a.1.ts)));
+        v.into_iter()
+            .take(limit.min(500))
+            .map(|(id, w)| WorkoutEntry {
+                id: id.clone(),
+                date: w.date.clone(),
+                kind: w.kind.clone(),
+                mins: w.mins,
+                kcal: w.kcal,
+                name: w.name.clone(),
+            })
+            .collect()
     }
 
     pub fn delete_workout(&mut self, id: &str) -> Result<()> {

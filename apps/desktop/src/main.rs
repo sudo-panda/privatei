@@ -141,6 +141,11 @@ fn add_workout(s: State<AppState>, date: String, kind: String, mins: f64, kcal: 
 }
 
 #[tauri::command]
+fn recent_workouts(s: State<AppState>, limit: usize) -> R<Vec<WorkoutEntry>> {
+    with(&s, |c| Ok(c.recent_workouts(limit)))
+}
+
+#[tauri::command]
 fn delete_workout(s: State<AppState>, id: String) -> R<()> {
     with(&s, |c| c.delete_workout(&id))
 }
@@ -358,6 +363,7 @@ fn main() {
             burn_estimate,
             add_workout,
             delete_workout,
+            recent_workouts,
             import_workouts,
             set_add_burn,
             get_stock,

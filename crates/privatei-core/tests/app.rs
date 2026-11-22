@@ -325,6 +325,16 @@ fn workout_import_and_validation() {
 }
 
 #[test]
+fn recent_workouts_newest_first() {
+    let mut c = core("2026-11-22", "12:00");
+    c.add_workout("2026-11-20", "run", 30.0, None, "A").unwrap();
+    c.add_workout("2026-11-22", "gym", 45.0, None, "B").unwrap();
+    c.add_workout("2026-11-21", "walk", 60.0, None, "C").unwrap();
+    let names: Vec<String> = c.recent_workouts(2).into_iter().map(|w| w.name).collect();
+    assert_eq!(names, vec!["B", "C"]);
+}
+
+#[test]
 fn settings_validation() {
     let mut c = core("2026-11-22", "12:00");
     assert!(c.save_settings(Settings { weight_kg: 301.0, ..Default::default() }).is_err());

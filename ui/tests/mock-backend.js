@@ -51,11 +51,74 @@ function seed() {
     db.foods.f1 = { name: 'Protein pudding', kcal100: 80, prot100: 10, piece: 200, src: 'claude' };
     db.rules = 'No cheese after 20:00';
   }
+  if (s === 'rich') seedRich();
   const rows = Number(params.get('rows') || 0);
   for (let i = 0; i < rows; i++) {
     const d = addDays(TODAY, -(i % 60));
     db.log[`r${i}`] = { date: d, meal: MEALS[i % 4], name: `Food ${i % 50}`, grams: 100, kcal: 100 + (i % 7) * 10, prot: 5 + (i % 5), est: i % 3 === 0, ts: db.ts++ };
   }
+}
+
+// Three weeks of believable data for looking at layouts.
+function seedRich() {
+  const B = [['Skyr · 200 g', 126, 22, 'Breakfast'], ['Oats · 50 g', 185, 6.5, 'Breakfast'], ['Frozen raspberries · 100 g', 52, 1.2, 'Breakfast'], ['Egg · 110 g', 157, 13.9, 'Breakfast'], ['Wholegrain bread · 80 g', 195, 6.8, 'Breakfast']];
+  const L = [['Chicken breast · 180 g', 297, 55.8, 'Lunch'], ['Rice cooked · 150 g', 195, 4.1, 'Lunch'], ['Smoked tofu · 150 g', 285, 28.5, 'Lunch'], ['Chickpeas drained · 120 g', 180, 10.2, 'Lunch'], ['Bell pepper roasted dry · 160 g', 64, 2.4, 'Lunch'], ['Cottage cheese · 200 g', 196, 22, 'Lunch']];
+  const S = [['Banana · 120 g', 107, 1.3, 'Snack'], ['Apple · 180 g', 94, 0.5, 'Snack'], ['Protein pudding · 200 g', 160, 20, 'Snack'], ['Erdnussmus · 15 g', 90, 3.8, 'Snack']];
+  const D = [['Cooked prawns · 150 g', 149, 31.5, 'Dinner'], ['Chicken thigh roasted skin-off · 200 g', 370, 48, 'Dinner'], ['Firm tofu roasted dry · 180 g', 342, 37.8, 'Dinner'], ['Potato roasted dry · 250 g', 300, 6.8, 'Dinner'], ['Frozen spinach · 150 g', 38, 4.4, 'Dinner'], ['Roti · 80 g', 240, 8, 'Dinner'], ['Mystery dal (AI)', 410, 21, 'Dinner']];
+  const pick = (arr, i, k) => arr[(i * 7 + k * 3) % arr.length];
+  for (let i = 1; i <= 21; i++) {
+    const d = addDays(TODAY, -i);
+    const n = 2 + (i % 3);
+    const meals = [pick(B, i, 0), pick(B, i, 1), pick(L, i, 0), pick(L, i, 2), pick(S, i, 0), pick(D, i, 0), pick(D, i, 1)];
+    if (i % 4 === 0) meals.push(pick(S, i, 2));
+    meals.slice(0, 5 + n).forEach(([name, kcal, prot, meal]) => {
+      db.log[`d${i}-${name}`] = { date: d, meal, name, grams: null, kcal, prot, est: name.includes('AI'), ts: db.ts++ };
+    });
+    if (i % 2 === 0) db.workouts[`w${i}`] = { date: d, kind: ['gym', 'run', 'walk', 'cycle'][i % 4], mins: [55, 35, 70, 45][i % 4], kcal: [478, 563, 351, 564][i % 4], name: ['Upper body', 'Lake run', 'Uetliberg hike', 'Spin class'][i % 4], ts: db.ts++ };
+  }
+  // Today so far
+  db.log.t1 = { date: TODAY, meal: 'Breakfast', name: 'Skyr · 200 g', grams: 200, kcal: 126, prot: 22, est: false, ts: db.ts++ };
+  db.log.t2 = { date: TODAY, meal: 'Breakfast', name: 'Oats · 50 g', grams: 50, kcal: 185, prot: 6.5, est: false, ts: db.ts++ };
+  // Plans: last week and the coming days
+  const plans = [
+    [{ slot: 'Lunch', name: 'Tofu bowl', kcal: 520, prot: 38 }, { slot: 'Dinner', name: 'Chicken, potatoes, spinach', kcal: 610, prot: 52 }],
+    [{ slot: 'Lunch', name: 'Chickpea salad', kcal: 450, prot: 22 }, { slot: 'Dinner', name: 'Prawns and rice', kcal: 520, prot: 36 }],
+    [{ slot: 'Lunch', name: 'Cottage cheese wrap', kcal: 430, prot: 34 }, { slot: 'Dinner', name: 'Dal with roti', kcal: 650, prot: 29 }],
+  ];
+  for (let i = -6; i <= 4; i++) db.plan[addDays(TODAY, i)] = { meals: plans[(i + 6) % 3].map((m) => ({ ...m, done: false })) };
+  // Medicines
+  const from = addDays(TODAY, -30);
+  db.meds.m1 = { groupId: 'g1', name: 'Vitamin D3', dose: '1000 IU', freq: 'daily', days: [], dom: null, time: '08:00', from, until: null };
+  db.meds.m2 = { groupId: 'g2', name: 'Magnesium', dose: '300 mg', freq: 'daily', days: [], dom: null, time: '21:00', from, until: null };
+  db.meds.m3 = { groupId: 'g3', name: 'Vitamin B12', dose: '1 tablet', freq: 'weekly', days: [1, 4], dom: null, time: '', from, until: null };
+  db.meds.m4 = { groupId: 'g4', name: 'Iron', dose: '1 tablet', freq: 'monthly', days: [], dom: 1, time: '', from, until: null };
+  db.meds.m5 = { groupId: 'g5', name: 'Antihistamine', dose: '10 mg', freq: 'daily', days: [], dom: null, time: '', from: addDays(TODAY, -40), until: addDays(TODAY, -12) };
+  for (let i = 1; i <= 21; i++) {
+    const d = addDays(TODAY, -i);
+    for (const [mid, m] of Object.entries(db.meds)) if (isDue(m, d) && (i * 5 + mid.length) % 7 !== 0) db.medlog[`${d}_${mid}`] = { date: d, medId: mid, at: m.time, ts: db.ts++ };
+  }
+  db.medlog[`${TODAY}_m1`] = { date: TODAY, medId: 'm1', at: '08:04', ts: db.ts++ };
+  // Kitchen
+  const st = [
+    ['Cooked rice', 450, 'g', 'cooked', -3, 1], ['Dal', 600, 'g', 'cooked', -1, 3], ['Roasted peppers', 300, 'g', 'cooked', -4, 0],
+    ['Skyr', 3, 'pots', 'chilled', -2, 9], ['Cottage cheese', 1, 'tub', 'chilled', -1, 6], ['Smoked tofu', 2, 'packs', 'chilled', -5, 4], ['Eggs', 8, 'pcs', 'chilled', -6, 14],
+    ['Bananas', 4, 'pcs', 'produce', -2, 3], ['Apples', 6, 'pcs', 'produce', -4, 12], ['Cucumber', 1, 'pcs', 'produce', -3, 5],
+    ['Oats', 900, 'g', 'shelf', -20, null], ['Chickpeas', 3, 'tins', 'shelf', -15, 400], ['Tinned tomatoes', 4, 'tins', 'shelf', -15, 500], ['Erdnussmus', 1, 'jar', 'shelf', -30, 120], ['Ground flaxseed', 250, 'g', 'shelf', -10, 60],
+    ['Frozen spinach', 750, 'g', 'freezer', -12, 150], ['Frozen raspberries', 500, 'g', 'freezer', -8, 200], ['Chicken breast', 4, 'portions', 'freezer', -6, 80],
+  ];
+  st.forEach(([name, qty, unit, cat, added, use], i) => (db.stock[`s${i}`] = { name, qty, unit, cat, added: addDays(TODAY, added), useBy: use === null ? null : addDays(TODAY, use) }));
+  const li = [
+    ['Skyr', '4 pots', 'chilled', 6.4, 1], ['Chicken breast', '600 g', 'chilled', 14.5, 1], ['Cottage cheese', '2 tubs', 'chilled', 4.2, 1], ['Bell peppers', '3', 'produce', 3.9, 1],
+    ['Bananas', '6', 'produce', 2.2, 1], ['Onions', '1 kg', 'produce', 1.95, 1], ['Rice', '1 kg', 'shelf', 2.6, 1],
+    ['Prawns', '400 g', 'freezer', 9.9, 2], ['Firm tofu', '3 packs', 'chilled', 8.7, 2], ['Lemons', '4', 'produce', 2.4, 2], ['Thomy Inferno mustard', '1', 'shelf', 2.95, 2], ['Frozen raspberries', '2 bags', 'freezer', 7.0, 2],
+  ];
+  li.forEach(([name, qty, cat, price, trip], i) => (db.list[`l${i}`] = { name, qty, cat, price, trip, checked: i === 3, inStock: false }));
+  db.foods.f1 = { name: 'Protein pudding', kcal100: 80, prot100: 10, piece: 200, src: 'claude' };
+  db.foods.f2 = { name: 'Mystery dal', kcal100: 137, prot100: 7, piece: 0, src: 'claude' };
+  db.foods.f3 = { name: 'Haferflocken', kcal100: 375, prot100: 13, piece: 0, src: 'gemini' };
+  db.foods.f4 = { name: 'Migros protein bar', kcal100: 360, prot100: 33, piece: 55, src: 'claude' };
+  db.rules = 'No cheese after 20:00\nMax 2 eggs a day\nDal counts as 1 roti unless I say otherwise';
+  db.settings.addBurn = true;
 }
 
 const live = (t) => Object.entries(db[t]);
@@ -345,6 +408,7 @@ const handlers = {
     return wid;
   },
   delete_workout: ({ id: wid }) => { delete db.workouts[wid]; },
+  recent_workouts: ({ limit }) => live('workouts').sort((a, b) => cmpDate(b[1].date, a[1].date) || b[1].ts - a[1].ts).slice(0, limit).map(([wid, w]) => ({ id: wid, date: w.date, kind: w.kind, mins: w.mins, kcal: w.kcal, name: w.name })),
   import_workouts: ({ text }) => {
     let added = 0, skipped = 0;
     for (const line of text.split('\n').filter((l) => l.trim())) {

@@ -1,6 +1,6 @@
 import { h, fill, icon, iconButton, toast, openSheet, n0, n1, dayLabel, chipGroup } from '../dom.js';
 import { call, quiet, message } from '../api.js';
-import { state, go } from '../state.js';
+import { state, go, changed } from '../state.js';
 
 const KINDS = [
   ['gym', 'Gym'],
@@ -14,20 +14,46 @@ const KINDS = [
 let els = {};
 let day = null;
 
-function mount(root) {
+let opts = {};
+
+/** opts.strip: show a 14-day calendar strip; opts.addPanel: a panel mounted above Food. */
+function mount(root, o = {}) {
+  opts = o;
+  els.strip = h('div', { class: 'card day-strip hidden', 'aria-label': 'Jump to a day' });
+  els.addSlot = h('div', { class: 'col' });
   els.nav = h('div', { class: 'card' });
   els.energy = h('div', { class: 'card', 'aria-label': 'Energy and protein' });
   els.plan = h('div', { class: 'card hidden', 'aria-label': 'Planned meals' });
   els.food = h('div', { class: 'card', 'aria-label': 'Food logged' });
   els.meds = h('div', { class: 'card hidden', 'aria-label': 'Medicines' });
   els.training = h('div', { class: 'card', 'aria-label': 'Training' });
-  root.append(h('div', { class: 'cols' }, h('div', { class: 'col' }, els.nav, els.energy, els.plan, els.meds), h('div', { class: 'col' }, els.food, els.training)));
+  root.append(h('div', { class: 'cols' }, h('div', { class: 'col' }, els.strip, els.nav, els.energy, els.plan, els.meds), h('div', { class: 'col' }, els.addSlot, els.food, els.training)));
+  if (opts.addPanel) opts.addPanel.mount(els.addSlot, { compact: true });
 }
 
-async function refresh() {
+async function refresh(o = {}) {
   if (!state.date) state.date = state.today;
-  day = await call('get_day', { date: state.date });
+  const [d] = await Promise.all([call('get_day', { date: state.date }), opts.addPanel ? opts.addPanel.refresh(o) : null]);
+  day = d;
   render();
+  if (opts.strip) renderStrip();
+}
+
+function renderStrip() {
+  els.strip.classList.remove('hidden');
+  const end = day.today;
+  const days = [];
+  for (let i = 13; i >= 0; i--) days.push(shift(end, -i));
+  const L = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  fill(
+    els.strip,
+    h('div', { class: 'strip' }, days.map((d) => {
+      const [y, m, dd] = d.split('-').map(Number);
+      const dow = new Date(y, m - 1, dd).getDay();
+      return h('button', { type: 'button', class: 'strip-day', 'aria-pressed': String(d === state.date), 'aria-label': dayLabel(d, day.today), onclick: () => setDate(d) },
+        h('span', { class: 'small muted', text: L[dow] }), h('b', { class: 'num', text: String(dd) }));
+    })),
+  );
 }
 
 function setDate(d) {
@@ -142,7 +168,7 @@ function render() {
   );
   fill(
     els.food,
-    h('div', { class: 'card-head' }, h('h2', { text: 'Food' }), h('button', { type: 'button', class: 'ghost', onclick: () => go('add') }, icon('add'), 'Add food')),
+    h('div', { class: 'card-head' }, h('h2', { text: 'Food' }), opts.addPanel ? null : h('button', { type: 'button', class: 'ghost', onclick: () => go('add') }, icon('add'), 'Add food')),
     groups.length ? groups : h('p', { class: 'muted', text: 'Nothing logged yet.' }),
     d.canCopyYesterday
       ? h('button', {
@@ -213,7 +239,7 @@ function render() {
   );
 }
 
-function openTraining() {
+export function openTraining() {
   const date = state.date;
   openSheet('Add training', (body, close) => {
     let kind = 'gym';
@@ -256,7 +282,7 @@ function openTraining() {
             await quiet('add_workout', { date, kind, mins: m, kcal: k, name: note.value });
             toast('Training saved');
             close();
-            refresh();
+            changed();
           } catch (e) {
             err.textContent = message(e);
           }
@@ -273,7 +299,7 @@ function openTraining() {
             toast(`Added ${r.added} session${r.added === 1 ? '' : 's'}${r.skipped ? `, skipped ${r.skipped} line${r.skipped === 1 ? '' : 's'}` : ''}`);
             if (r.added) {
               close();
-              refresh();
+              changed();
             }
           },
         }, 'Import pasted sessions'),
@@ -282,4 +308,4 @@ function openTraining() {
   });
 }
 
-export default { id: 'today', title: 'Today', icon: 'today', mount, refresh, setDate };
+export default { id: 'today', title: 'Today', icon: 'today', mount, refresh, setDate, get els() { return els; } };

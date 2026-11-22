@@ -2,8 +2,27 @@ import { h, fill, toast, openSheet } from '../dom.js';
 import { call, quiet, message } from '../api.js';
 
 export async function openRules() {
-  let rules = await call('get_rules');
-  openSheet('House rules', (body) => {
+  const rules = await call('get_rules');
+  openSheet('House rules', (body) => buildRules(body, rules));
+}
+
+/** House rules inline (Settings), same chat as the sheet. */
+export function rulesPanel() {
+  let box;
+  return {
+    id: 'rules', title: 'House rules', icon: 'chat',
+    mount(root) { box = h('div', { class: 'rules-inline' }); root.append(box); },
+    async refresh(o = {}) {
+      if (o.background && box.childElementCount) return;
+      fill(box);
+      buildRules(box, await call('get_rules'));
+    },
+  };
+}
+
+function buildRules(body, initial) {
+  let rules = initial;
+  {
     const current = h('div', { class: 'card' });
     const showRules = () =>
       fill(current, h('h3', { text: 'Current rules' }), h('div', { class: 'pre small', 'data-testid': 'rules-text', text: rules || 'No rules yet.' }));
@@ -59,5 +78,5 @@ export async function openRules() {
       }
     });
     body.append(current, h('p', { class: 'small muted', text: 'Tell the AI how you want food logged. Changes are only saved when you tap Apply.' }), log, input, send);
-  });
+  }
 }

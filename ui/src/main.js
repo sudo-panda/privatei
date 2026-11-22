@@ -22,9 +22,56 @@ import week from './screens/week.js';
 import shop from './screens/shop.js';
 import settings, { openSettings } from './screens/settings.js';
 import { checkOnLaunch } from './update.js';
-import { openRules } from './screens/rules.js';
+import { openRules, rulesPanel } from './screens/rules.js';
+import { planPanel, historyPanel } from './screens/week.js';
+import { trainingPanel } from './screens/training.js';
+import journal from './screens/journal.js';
+import { composite } from './compose.js';
 
-const screens = [today, add, meds, stock, week, shop, settings];
+// Layouts being tried out. "current" is the shipped one until a new one is approved.
+const LAYOUTS = {
+  current: { name: 'Current', build: () => [today, add, meds, stock, week, shop, settings] },
+  a: {
+    name: 'A · Day, Kitchen, Progress',
+    build: () => [
+      { ...today, title: 'Day', mount: (r) => today.mount(r, { strip: true, addPanel: add }) },
+      composite({ id: 'kitchen', title: 'Kitchen', icon: 'kitchen', parts: [{ label: 'Meal plan', panel: planPanel() }, { label: 'Shopping', panel: shop }, { label: 'Stock', panel: stock }] }),
+      { ...historyPanel(trainingPanel()), id: 'progress', title: 'Progress', icon: 'chart' },
+      composite({ id: 'settings', title: 'Settings', icon: 'gear', mode: 'stack', narrow: true, parts: [{ panel: settings }, { label: 'House rules', panel: rulesPanel() }, { label: 'Medicine schedules', panel: meds }] }),
+    ],
+  },
+  b: {
+    name: 'B · Five areas',
+    build: () => [
+      { ...today, mount: (r) => today.mount(r, { addPanel: add }) },
+      { ...planPanel(), id: 'plan', title: 'Plan', icon: 'week' },
+      composite({ id: 'kitchen', title: 'Kitchen', icon: 'kitchen', parts: [{ label: 'Shopping', panel: shop }, { label: 'Stock', panel: stock }] }),
+      composite({ id: 'health', title: 'Health', icon: 'heart', mode: 'stack', parts: [{ label: 'Medicines', panel: meds }, { label: 'Training', panel: trainingPanel() }] }),
+      { ...historyPanel(), id: 'history', title: 'History', icon: 'chart' },
+      composite({ id: 'settings', title: 'Settings', icon: 'gear', mode: 'stack', narrow: true, parts: [{ panel: settings }, { label: 'House rules', panel: rulesPanel() }] }),
+    ],
+  },
+  c: {
+    name: 'C · Journal first',
+    build: () => [
+      { ...journal, icon: 'book' },
+      { ...planPanel(), id: 'plan', title: 'Plan', icon: 'week' },
+      composite({ id: 'kitchen', title: 'Kitchen', icon: 'kitchen', parts: [{ label: 'Shopping', panel: shop }, { label: 'Stock', panel: stock }] }),
+      { ...meds, title: 'Medicines', short: 'Meds' },
+      { ...historyPanel(trainingPanel()), id: 'progress', title: 'Progress', icon: 'chart' },
+      composite({ id: 'settings', title: 'Settings', icon: 'gear', mode: 'stack', narrow: true, parts: [{ panel: settings }, { label: 'House rules', panel: rulesPanel() }] }),
+    ],
+  },
+};
+const params = new URLSearchParams(location.search);
+let layoutId = params.get('layout') || '';
+try {
+  if (!layoutId) layoutId = localStorage.getItem('layout') || '';
+} catch {}
+if (!LAYOUTS[layoutId]) layoutId = 'current';
+document.body.dataset.layout = layoutId;
+
+const screens = LAYOUTS[layoutId].build().map((x) => (x.id === 'settings' ? { ...x, noTab: true } : x));
 const tabbed = screens.filter((s) => !s.noTab);
 const main = document.getElementById('main');
 const tabs = document.getElementById('tabs');
@@ -69,7 +116,7 @@ document.addEventListener('keydown', (e) => {
       openRules();
     } else if (e.key.toLowerCase() === 'n' && !anySheetOpen()) {
       e.preventDefault();
-      show('add').then(() => document.getElementById('describe')?.focus());
+      show(screens.some((x) => x.id === 'add') ? 'add' : 'today').then(() => document.getElementById('describe')?.focus());
     }
     return;
   }
@@ -103,6 +150,7 @@ setGo(show);
 
 const rulesBtn = document.getElementById('open-rules');
 rulesBtn.append(icon('chat'));
+if (layoutId !== 'current') rulesBtn.classList.add('hidden'); // rules live in Settings
 rulesBtn.addEventListener('click', openRules);
 const gear = document.getElementById('open-settings');
 gear.append(icon('gear'));
@@ -142,8 +190,26 @@ async function start() {
       return performance.now() - t0;
     };
   }
+  if (params.has('layout')) layoutSwitcher();
   document.body.dataset.ready = '1';
   setTimeout(checkOnLaunch, 3000);
+}
+
+/** Preview-only: switch between the layouts being compared. */
+function layoutSwitcher() {
+  const bar = h('div', { class: 'layout-switcher', role: 'group', 'aria-label': 'Layout to try' });
+  for (const [id, l] of Object.entries(LAYOUTS)) {
+    bar.append(h('button', {
+      type: 'button',
+      'aria-pressed': String(id === layoutId),
+      onclick: () => {
+        const p = new URLSearchParams(location.search);
+        p.set('layout', id);
+        location.search = p.toString();
+      },
+    }, l.name));
+  }
+  document.body.append(bar);
 }
 
 start();

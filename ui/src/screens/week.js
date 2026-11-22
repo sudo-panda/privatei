@@ -21,9 +21,9 @@ async function refresh() {
   return renderHistory(await call('get_history'));
 }
 
-function renderPlan(w) {
+function renderPlan(w, body = els.body, again = refresh) {
   fill(
-    els.body,
+    body,
     h('div', { class: 'cols' }, h('div', { class: 'col' }, h(
       'div',
       { class: 'card' },
@@ -33,15 +33,15 @@ function renderPlan(w) {
         onclick: async () => {
           const n = await call('repeat_last_week');
           toast(n ? `Planned ${n} more day${n === 1 ? '' : 's'}` : 'Those days are already planned');
-          refresh();
+          again();
         },
       }, 'Repeat the last planned week'),
     )), h('div', { class: 'col' },
-    h('div', { class: 'card' }, h('div', { class: 'list' }, w.days.map((d) => dayRow(d)))))),
+    h('div', { class: 'card' }, h('div', { class: 'list' }, w.days.map((d) => dayRow(d, again)))))),
   );
 }
 
-function dayRow(d) {
+function dayRow(d, again = refresh) {
   const isOpen = open.has(d.date);
   const head = h(
     'button',
@@ -53,21 +53,21 @@ function dayRow(d) {
       'aria-label': `${dayLabel(d.date, state.today)}, ${d.meals.length} planned meals`,
       onclick: () => {
         isOpen ? open.delete(d.date) : open.add(d.date);
-        refresh();
+        again();
       },
     },
     h('span', { class: 'name' }, h('b', { text: dayLabel(d.date, state.today) }), d.isToday ? h('span', { class: 'badge', style: 'margin-left:6px', text: 'today' }) : null),
     h('span', { class: 'num small muted', text: d.meals.length ? `${n0(d.kcal)} kcal · ${n1(d.prot)} g` : '—' }),
   );
   if (!isOpen) return h('div', { class: 'item', style: 'padding:0', 'data-plan-day': d.date }, head);
-  return h('div', { 'data-plan-day': d.date, style: 'border-top:1px solid var(--line)' }, head, planEditor(d));
+  return h('div', { 'data-plan-day': d.date, style: 'border-top:1px solid var(--line)' }, head, planEditor(d, again));
 }
 
-function planEditor(d) {
+function planEditor(d, again = refresh) {
   const meals = d.meals.map((m) => ({ ...m }));
   const save = async () => {
     await call('set_plan', { date: d.date, meals });
-    refresh();
+    again();
   };
   const slot = h('select', { 'aria-label': 'Meal slot' }, MEALS.map((m) => h('option', { value: m, text: m })));
   const name = h('input', { type: 'text', maxlength: 80, placeholder: 'Meal', 'aria-label': 'Planned meal name' });
@@ -97,7 +97,7 @@ function planEditor(d) {
         meals.push({ slot: slot.value, name: name.value.trim(), kcal: k, prot: p, done: false });
         try {
           await quiet('set_plan', { date: d.date, meals });
-          refresh();
+          again();
         } catch (e) {
           meals.pop();
           err.textContent = message(e);
@@ -107,11 +107,11 @@ function planEditor(d) {
   );
 }
 
-function renderHistory(hist) {
+function renderHistory(hist, body = els.body) {
   const s = hist.summary;
   const used = s.daysUsed;
   fill(
-    els.body,
+    body,
     h('div', { class: 'cols' }, h('div', { class: 'col' }, h(
       'div',
       { class: 'card', 'aria-label': 'Summary' },
@@ -155,3 +155,34 @@ function stat(label, value) {
 }
 
 export default { id: 'week', title: 'Week', icon: 'week', mount, refresh };
+
+/** "The plan" on its own. */
+export function planPanel() {
+  let body;
+  const p = {
+    id: 'plan', title: 'Plan', icon: 'week',
+    mount(root) { body = h('div', { class: 'screen' }); root.append(body); },
+    async refresh() { renderPlan(await call('get_week'), body, p.refresh); },
+  };
+  return p;
+}
+
+/** "What happened" on its own, with optional extra cards under the summary. */
+export function historyPanel(extra) {
+  let body, extraEl;
+  return {
+    id: 'history', title: 'History', icon: 'chart',
+    mount(root) {
+      body = h('div', { class: 'screen' });
+      root.append(body);
+      if (extra) { extraEl = h('div', { class: 'screen' }); extra.mount(extraEl); }
+    },
+    async refresh() {
+      renderHistory(await call('get_history'), body);
+      if (extra) {
+        body.querySelector('.cols > .col').append(extraEl);
+        await extra.refresh();
+      }
+    },
+  };
+}
