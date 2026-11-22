@@ -18,7 +18,7 @@ export function composite({ id, title, icon, short, parts, mode = 'segment', nar
       for (const p of parts) {
         p.box = mode === 'stack' && p.label
           ? h('section', { class: 'set-section', 'aria-label': p.label }, h('h2', { text: p.label }))
-          : h('div', { class: 'screen' });
+          : h('div', { class: mode === 'stack' ? 'set-section' : 'screen' });
         if (mode === 'segment') p.box.classList.toggle('hidden', p !== parts[0]);
         wrap.append(p.box);
       }

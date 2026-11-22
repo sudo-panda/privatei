@@ -23,42 +23,24 @@ import shop from './screens/shop.js';
 import settings, { openSettings } from './screens/settings.js';
 import { checkOnLaunch } from './update.js';
 import { openRules, rulesPanel } from './screens/rules.js';
-import { planPanel, historyPanel } from './screens/week.js';
-import { trainingPanel } from './screens/training.js';
-import journal from './screens/journal.js';
+import { trainingPanel, trainingSummaryPanel } from './screens/training.js';
+import { dosesPanel } from './screens/doses.js';
+import plan from './screens/plan.js';
+import history from './screens/history.js';
 import { composite } from './compose.js';
 
-// Layouts being tried out. "current" is the shipped one until a new one is approved.
+// Layouts being tried out. "current" is the shipped one until the new one is approved.
 const LAYOUTS = {
   current: { name: 'Current', build: () => [today, add, meds, stock, week, shop, settings] },
-  a: {
-    name: 'A · Day, Kitchen, Progress',
+  new: {
+    name: 'New: Log · Plan · Kitchen · Meds · Training · History',
     build: () => [
-      { ...today, title: 'Day', mount: (r) => today.mount(r, { strip: true, addPanel: add }) },
-      composite({ id: 'kitchen', title: 'Kitchen', icon: 'kitchen', parts: [{ label: 'Meal plan', panel: planPanel() }, { label: 'Shopping', panel: shop }, { label: 'Stock', panel: stock }] }),
-      { ...historyPanel(trainingPanel()), id: 'progress', title: 'Progress', icon: 'chart' },
-      composite({ id: 'settings', title: 'Settings', icon: 'gear', mode: 'stack', narrow: true, parts: [{ panel: settings }, { label: 'House rules', panel: rulesPanel() }, { label: 'Medicine schedules', panel: meds }] }),
-    ],
-  },
-  b: {
-    name: 'B · Five areas',
-    build: () => [
-      { ...today, mount: (r) => today.mount(r, { addPanel: add }) },
-      { ...planPanel(), id: 'plan', title: 'Plan', icon: 'week' },
+      { ...today, title: 'Log', icon: 'book', mount: (r) => today.mount(r, { strip: true, addPanel: add }) },
+      plan,
       composite({ id: 'kitchen', title: 'Kitchen', icon: 'kitchen', parts: [{ label: 'Shopping', panel: shop }, { label: 'Stock', panel: stock }] }),
-      composite({ id: 'health', title: 'Health', icon: 'heart', mode: 'stack', parts: [{ label: 'Medicines', panel: meds }, { label: 'Training', panel: trainingPanel() }] }),
-      { ...historyPanel(), id: 'history', title: 'History', icon: 'chart' },
-      composite({ id: 'settings', title: 'Settings', icon: 'gear', mode: 'stack', narrow: true, parts: [{ panel: settings }, { label: 'House rules', panel: rulesPanel() }] }),
-    ],
-  },
-  c: {
-    name: 'C · Journal first',
-    build: () => [
-      { ...journal, icon: 'book' },
-      { ...planPanel(), id: 'plan', title: 'Plan', icon: 'week' },
-      composite({ id: 'kitchen', title: 'Kitchen', icon: 'kitchen', parts: [{ label: 'Shopping', panel: shop }, { label: 'Stock', panel: stock }] }),
-      { ...meds, title: 'Medicines', short: 'Meds' },
-      { ...historyPanel(trainingPanel()), id: 'progress', title: 'Progress', icon: 'chart' },
+      composite({ id: 'meds', title: 'Meds', icon: 'meds', mode: 'stack', parts: [{ panel: dosesPanel() }, { label: 'Schedules', panel: meds }] }),
+      composite({ id: 'training', title: 'Training', icon: 'run', mode: 'stack', parts: [{ panel: trainingSummaryPanel() }, { panel: trainingPanel() }] }),
+      history,
       composite({ id: 'settings', title: 'Settings', icon: 'gear', mode: 'stack', narrow: true, parts: [{ panel: settings }, { label: 'House rules', panel: rulesPanel() }] }),
     ],
   },

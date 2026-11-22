@@ -78,6 +78,67 @@ pub mod lenient {
     }
 }
 
+/// Vitamins and minerals tracked per food / per day.
+/// Units: vitamin C mg, vitamin D µg, B12 µg, iron mg, calcium mg.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Micros {
+    #[serde(deserialize_with = "lenient::f64")]
+    pub vit_c: f64,
+    #[serde(deserialize_with = "lenient::f64")]
+    pub vit_d: f64,
+    #[serde(deserialize_with = "lenient::f64")]
+    pub b12: f64,
+    #[serde(deserialize_with = "lenient::f64")]
+    pub iron: f64,
+    #[serde(deserialize_with = "lenient::f64")]
+    pub calcium: f64,
+}
+
+/// Daily reference amounts for an adult man (vitamin C 90 mg, D 15 µg, B12 2.4 µg, iron 8 mg, calcium 1000 mg).
+pub const MICRO_REF: Micros = Micros { vit_c: 90.0, vit_d: 15.0, b12: 2.4, iron: 8.0, calcium: 1000.0 };
+
+/// (key, label, unit) in display order.
+pub const MICRO_NAMES: [(&str, &str, &str); 5] = [
+    ("vitC", "Vitamin C", "mg"),
+    ("vitD", "Vitamin D", "µg"),
+    ("b12", "Vitamin B12", "µg"),
+    ("iron", "Iron", "mg"),
+    ("calcium", "Calcium", "mg"),
+];
+
+impl Micros {
+    pub fn add(&mut self, o: &Micros) {
+        self.vit_c += o.vit_c;
+        self.vit_d += o.vit_d;
+        self.b12 += o.b12;
+        self.iron += o.iron;
+        self.calcium += o.calcium;
+    }
+    pub fn scale(&self, f: f64) -> Micros {
+        Micros { vit_c: self.vit_c * f, vit_d: self.vit_d * f, b12: self.b12 * f, iron: self.iron * f, calcium: self.calcium * f }
+    }
+    pub fn values(&self) -> [f64; 5] {
+        [self.vit_c, self.vit_d, self.b12, self.iron, self.calcium]
+    }
+    /// Clamp to sane ranges (AI answers, imports).
+    pub fn clamped(&self) -> Micros {
+        let c = |x: f64, max: f64| if x.is_finite() { x.clamp(0.0, max) } else { 0.0 };
+        Micros {
+            vit_c: c(self.vit_c, 2000.0),
+            vit_d: c(self.vit_d, 250.0),
+            b12: c(self.b12, 1000.0),
+            iron: c(self.iron, 100.0),
+            calcium: c(self.calcium, 5000.0),
+        }
+    }
+    /// Round for storage/display.
+    pub fn rounded(&self) -> Micros {
+        let r = |x: f64| (x * 10.0).round() / 10.0;
+        Micros { vit_c: r(self.vit_c), vit_d: r(self.vit_d), b12: r(self.b12), iron: r(self.iron), calcium: self.calcium.round() }
+    }
+}
+
 fn yes() -> bool {
     true
 }
@@ -106,6 +167,11 @@ pub struct Log {
     pub est: bool,
     #[serde(deserialize_with = "lenient::i64")]
     pub ts: i64,
+    /// Fiber in g; None when unknown (older rows, foods without data).
+    #[serde(deserialize_with = "lenient::opt_f64", skip_serializing_if = "Option::is_none")]
+    pub fiber: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub micros: Option<Micros>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -123,6 +189,8 @@ pub struct PlanMeal {
     pub done: bool,
     #[serde(deserialize_with = "lenient::opt_string", skip_serializing_if = "Option::is_none")]
     pub log_id: Option<String>,
+    #[serde(deserialize_with = "lenient::opt_f64", skip_serializing_if = "Option::is_none")]
+    pub fiber: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -235,6 +303,10 @@ pub struct Food {
     pub prot100: f64,
     #[serde(deserialize_with = "lenient::f64")]
     pub piece: f64,
+    #[serde(deserialize_with = "lenient::opt_f64", skip_serializing_if = "Option::is_none")]
+    pub fiber100: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub micros100: Option<Micros>,
     #[serde(deserialize_with = "lenient::string")]
     pub src: String,
     #[serde(deserialize_with = "lenient::i64")]
@@ -259,11 +331,17 @@ pub struct Settings {
     pub kcal_target: f64,
     #[serde(deserialize_with = "lenient::f64")]
     pub prot_floor: f64,
+    #[serde(default = "default_fiber", deserialize_with = "lenient::f64")]
+    pub fiber_floor: f64,
+}
+
+fn default_fiber() -> f64 {
+    30.0
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { add_burn: false, weight_kg: 82.0, kcal_target: 1500.0, prot_floor: 90.0 }
+        Settings { add_burn: false, weight_kg: 82.0, kcal_target: 1500.0, prot_floor: 90.0, fiber_floor: 30.0 }
     }
 }
 
@@ -278,6 +356,9 @@ impl Settings {
         }
         if !(0.0..=400.0).contains(&self.prot_floor) {
             return Err("Protein floor must be between 0 and 400 g.".into());
+        }
+        if !(0.0..=100.0).contains(&self.fiber_floor) {
+            return Err("Fiber floor must be between 0 and 100 g.".into());
         }
         Ok(())
     }
@@ -363,6 +444,9 @@ mod tests {
         assert!(Settings { weight_kg: 29.0, ..Default::default() }.validate().is_err());
         assert!(Settings { kcal_target: 6001.0, ..Default::default() }.validate().is_err());
         assert!(Settings { prot_floor: -1.0, ..Default::default() }.validate().is_err());
+        assert!(Settings { fiber_floor: 101.0, ..Default::default() }.validate().is_err());
+        let old: Settings = serde_json::from_str(r#"{"weightKg":80,"kcalTarget":1600,"protFloor":100}"#).unwrap();
+        assert_eq!(old.fiber_floor, 30.0, "older backups get the default fiber floor");
         assert!(Settings { prot_floor: 400.0, kcal_target: 800.0, weight_kg: 300.0, ..Default::default() }.validate().is_ok());
     }
 

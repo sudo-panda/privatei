@@ -98,22 +98,24 @@ function renderTargets() {
   const weight = field('set-weight', 'Weight', s.weightKg, 30, 300, '0.1', 'kg');
   const kcal = field('set-kcal', 'Daily calories', s.kcalTarget, 800, 6000, '10', 'kcal');
   const prot = field('set-prot', 'Protein floor', s.protFloor, 0, 400, '1', 'g');
+  const fiber = field('set-fiber', 'Fiber floor', s.fiberFloor ?? 30, 0, 100, '1', 'g');
   const save = async () => {
-    const w = Number(weight.firstChild.value), k = Number(kcal.firstChild.value), p = Number(prot.firstChild.value);
+    const w = Number(weight.firstChild.value), k = Number(kcal.firstChild.value), p = Number(prot.firstChild.value), f = Number(fiber.firstChild.value);
     if (!(w >= 30 && w <= 300)) return say(st, 'Weight must be between 30 and 300 kg.', 'error');
     if (!(k >= 800 && k <= 6000)) return say(st, 'Daily calories must be between 800 and 6000.', 'error');
     if (!(p >= 0 && p <= 400)) return say(st, 'Protein floor must be between 0 and 400 g.', 'error');
-    if (w === s.weightKg && k === s.kcalTarget && p === s.protFloor) return say(st, '');
+    if (!(f >= 0 && f <= 100)) return say(st, 'Fiber floor must be between 0 and 100 g.', 'error');
+    if (w === s.weightKg && k === s.kcalTarget && p === s.protFloor && f === s.fiberFloor) return say(st, '');
     try {
-      await quiet('save_settings', { settings: { ...s, weightKg: w, kcalTarget: k, protFloor: p } });
-      s = { ...s, weightKg: w, kcalTarget: k, protFloor: p };
+      await quiet('save_settings', { settings: { ...s, weightKg: w, kcalTarget: k, protFloor: p, fiberFloor: f } });
+      s = { ...s, weightKg: w, kcalTarget: k, protFloor: p, fiberFloor: f };
       say(st, 'Saved', 'ok');
       changed();
     } catch (e) {
       say(st, message(e), 'error');
     }
   };
-  for (const f of [weight, kcal, prot]) f.firstChild.addEventListener('change', save);
+  for (const x of [weight, kcal, prot, fiber]) x.firstChild.addEventListener('change', save);
   fill(
     els.targets,
     section(
@@ -121,6 +123,7 @@ function renderTargets() {
       row('Weight', 'Used for training burn.', weight),
       row('Daily calories', 'Your energy target.', kcal),
       row('Protein floor', 'The minimum to hit each day.', prot),
+      row('Fiber floor', 'The minimum fiber each day.', fiber),
       st,
     ),
   );

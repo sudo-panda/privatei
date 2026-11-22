@@ -13,7 +13,8 @@ fn set_today(c: &mut Core, today: &str) {
 }
 
 fn log(c: &mut Core, date: &str, name: &str, kcal: f64, prot: f64) -> String {
-    c.add_log(date, LogInput { meal: "Lunch".into(), name: name.into(), grams: None, kcal, prot, est: false }).unwrap()
+    c.add_log(date, LogInput { meal: "Lunch".into(), name: name.into(), grams: None, kcal, prot, est: false, fiber: None, micros: None })
+        .unwrap()
 }
 
 #[test]
@@ -38,7 +39,16 @@ fn totals_and_targets() {
 #[test]
 fn manual_log_validation() {
     let mut c = core("2026-11-22", "12:00");
-    let bad = |kcal, prot, name: &str| LogInput { meal: "Lunch".into(), name: name.into(), grams: None, kcal, prot, est: false };
+    let bad = |kcal, prot, name: &str| LogInput {
+        meal: "Lunch".into(),
+        name: name.into(),
+        grams: None,
+        kcal,
+        prot,
+        est: false,
+        fiber: None,
+        micros: None,
+    };
     assert!(c.add_log("2026-11-22", bad(0.0, 1.0, "x")).is_err());
     assert!(c.add_log("2026-11-22", bad(5000.0, 1.0, "x")).is_err());
     assert!(c.add_log("2026-11-22", bad(100.0, 501.0, "x")).is_err());
@@ -399,4 +409,97 @@ fn ai_settings_never_echo_key() {
     let mut bad = input("", false);
     bad.claude_model = "x; rm -rf".into();
     assert!(c.save_ai_settings(bad).is_err());
+}
+
+#[test]
+fn fiber_and_micros_on_the_day() {
+    let mut c = core("2026-11-22", "08:00");
+    let p = c.prepare_estimate("80g oats, 200g frozen raspberries").unwrap();
+    let v = c.finish_estimate(p, None);
+    c.save_items("2026-11-22", v.items).unwrap();
+    let d = c.day("2026-11-22").unwrap();
+    assert!(d.fiber_known);
+    assert_eq!(d.fiber, 21.1); // 8.1 + 13.0
+    assert_eq!(d.fiber_floor, 30.0);
+    assert!(!d.fiber_met);
+    let vc = d.micros.iter().find(|m| m.key == "vitC").unwrap();
+    assert_eq!((vc.amount, vc.pct), (52.0, Some(58.0)));
+    // A manual row without fiber doesn't make fiber "known" on an empty day.
+    log(&mut c, "2026-11-21", "Mystery", 300.0, 10.0);
+    assert!(!c.day("2026-11-21").unwrap().fiber_known);
+}
+
+#[test]
+fn history_insights_point_at_what_is_missing() {
+    let mut c = core("2026-11-22", "12:00");
+    set_today(&mut c, "2026-11-08");
+    c.save_med(med("Magnesium", "21:00")).unwrap();
+    let mid = c.meds_view().daily[0].id.clone();
+    set_today(&mut c, "2026-11-22");
+    for i in 0..14 {
+        let d = privatei_core::dates::add_days("2026-11-22", -i);
+        // Low protein most days, low fiber, a little vitamin C.
+        let p = c.prepare_estimate(&format!("150g rice cooked, {} g chicken breast, 1 apple", if i % 3 == 0 { 300 } else { 150 })).unwrap();
+        let v = c.finish_estimate(p, None);
+        c.save_items(&d, v.items).unwrap();
+        if i % 4 != 0 {
+            c.toggle_dose(&d, &mid).unwrap();
+        }
+    }
+    let h = c.history_range(14);
+    assert_eq!(h.range, 14);
+    assert_eq!(h.days.len(), 14);
+    let titles: Vec<&str> = h.insights.iter().map(|i| i.title.as_str()).collect();
+    assert!(titles.iter().any(|t| t.starts_with("Protein under 90 g on")), "{titles:?}");
+    assert!(titles.iter().any(|t| t.starts_with("Fiber averaged")), "{titles:?}");
+    assert!(titles.iter().any(|t| t.starts_with("Vitamin D at 2%")), "{titles:?}");
+    assert!(titles.iter().any(|t| t.starts_with("Magnesium missed 4 of 14")), "{titles:?}");
+    assert!(titles.iter().any(|t| t.contains("training")), "{titles:?}");
+    assert_eq!(h.insights[0].level, "warn", "warnings come first");
+    let fiber_tip = &h.insights.iter().find(|i| i.title.starts_with("Fiber")).unwrap().detail;
+    assert!(fiber_tip.contains("Ground flaxseed"));
+    assert_eq!(h.meds[0].missed, 4);
+    assert!(h.summary.avg_fiber.unwrap() < 30.0);
+}
+
+#[test]
+fn plan_ahead_shows_today_onwards() {
+    let mut c = core("2026-11-22", "12:00");
+    let meal =
+        |slot: &str, k: f64| PlanMeal { slot: slot.into(), name: "x".into(), kcal: k, prot: 40.0, fiber: Some(8.0), ..Default::default() };
+    c.set_plan("2026-11-20", vec![meal("Lunch", 500.0)]).unwrap();
+    c.add_plan_meal("2026-11-22", meal("Lunch", 600.0)).unwrap();
+    c.add_plan_meal("2026-11-22", meal("Dinner", 1000.0)).unwrap();
+    c.add_plan_meal("2026-11-24", meal("Breakfast", 300.0)).unwrap();
+    let p = c.plan_ahead(7);
+    assert_eq!(p.days.len(), 7);
+    assert_eq!(p.days[0].date, "2026-11-22");
+    assert!(p.days[0].is_today && p.days[0].over);
+    assert_eq!((p.days[0].kcal, p.days[0].fiber), (1600.0, 16.0));
+    assert_eq!(p.days[0].empty_slots, vec!["Breakfast", "Snack"]);
+    assert_eq!(p.days[2].meals.len(), 1);
+    assert_eq!(p.planned_days, 2);
+    assert!(p.has_earlier);
+    c.remove_plan_meal("2026-11-22", 0).unwrap();
+    assert_eq!(c.plan_ahead(1).days[0].kcal, 1000.0);
+}
+
+#[test]
+fn training_summary_this_week() {
+    let mut c = core("2026-11-22", "12:00");
+    c.add_workout("2026-11-22", "gym", 60.0, Some(400.0), "").unwrap();
+    c.add_workout("2026-11-19", "run", 30.0, Some(300.0), "").unwrap();
+    c.add_workout("2026-11-10", "run", 45.0, Some(500.0), "").unwrap();
+    let t = c.training_summary();
+    assert_eq!((t.week_sessions, t.week_mins, t.week_kcal, t.last_days_ago), (2, 90.0, 700.0, Some(0)));
+    assert_eq!(t.by_kind[0], ("run".to_string(), 75.0));
+    assert_eq!(t.daily.len(), 28);
+}
+
+#[test]
+fn settings_fiber_floor() {
+    let mut c = core("2026-11-22", "12:00");
+    assert!(c.save_settings(Settings { fiber_floor: 120.0, ..Default::default() }).is_err());
+    c.save_settings(Settings { fiber_floor: 35.0, ..Default::default() }).unwrap();
+    assert_eq!(c.day("2026-11-22").unwrap().fiber_floor, 35.0);
 }

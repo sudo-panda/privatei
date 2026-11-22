@@ -317,3 +317,58 @@ details > summary::-webkit-details-marker { display: none; }
   .strip-day:nth-child(-n+7) { display: none; }
   .layout-switcher { bottom: 70px; }
 }
+
+/* ---------- Charts ---------- */
+.chart { position: relative; width: 100%; min-width: 0; }
+.chart svg { display: block; overflow: visible; }
+.chart-axis { stroke: var(--line); stroke-width: 1; }
+.chart-ref { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; }
+.chart-label { fill: var(--muted); font: 11px var(--f-num); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.chart-bar { fill: var(--energy); }
+.chart-bar.over { fill: var(--over); }
+.chart-bar.prot { fill: var(--protein); }
+.chart-bar.fiber { fill: var(--warn); }
+.chart-bar.short { opacity: 0.45; }
+.chart-bar.train { fill: var(--accent); }
+.chart-bar.muted { fill: var(--line); }
+.chart-hit:hover .chart-bar { opacity: 1; filter: brightness(1.15); }
+.chart-tip { position: absolute; top: 0; width: 140px; background: var(--ink); color: var(--bg); font-size: 12px; padding: 4px 8px; border-radius: 6px; pointer-events: none; z-index: 2; text-align: center; }
+.pct-bars { display: flex; flex-direction: column; gap: 8px; }
+.pct-row { display: grid; grid-template-columns: minmax(90px, 30%) 1fr auto; gap: 10px; align-items: center; }
+.pct-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pct-track { position: relative; height: 10px; border-radius: 999px; background: var(--line); }
+.pct-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--good); }
+.pct-fill.mid { background: var(--warn); }
+.pct-fill.short { background: var(--over); }
+.pct-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: 0.5; }
+.pct-val { min-width: 92px; text-align: right; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat-tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stat-tile b { font: 600 22px var(--f-num); }
+.stat-tile b.small-b { font: 600 15px var(--f-body); }
+.stat-tile.warn { border-color: var(--warn); }
+.stat-tile.good b { color: var(--good); }
+.stat-tile.warn b { color: var(--warn); }
+.insight { align-items: flex-start !important; }
+.insight .badge { margin-top: 2px; min-width: 112px; text-align: center; }
+.bar.fiber > span { background: var(--warn); }
+.bar.fiber.good > span { background: var(--good); }
+.bar.thin { height: 6px; }
+.micro-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.micro { display: inline-flex; gap: 6px; align-items: baseline; font-size: 12px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); }
+.micro.short b { color: var(--over); }
+.micro.mid b { color: var(--warn); }
+.micro.ok b { color: var(--good); }
+.micro-name { color: var(--muted); }
+
+/* ---------- Plan board ---------- */
+.plan-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; align-items: start; }
+.plan-day.is-today { border-color: var(--accent); }
+.plan-day.empty { border-style: dashed; }
+.plan-day-title { font-size: 17px; color: var(--ink); text-transform: none; letter-spacing: 0; }
+.plan-slots { display: flex; flex-direction: column; gap: 6px; }
+.plan-slot { border-top: 1px solid var(--line); padding-top: 6px; }
+.slot-name { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.plan-meal { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 2px 0; }
+.plan-meal .name { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; overflow-wrap: anywhere; }
+.plan-head .segment { min-width: 160px; }

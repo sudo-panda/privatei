@@ -111,6 +111,13 @@ pub struct DayView {
     pub add_burn: bool,
     pub over: bool,
     pub prot_met: bool,
+    /// Sum of known fiber; `fiber_known` says whether any row had fiber data.
+    pub fiber: f64,
+    pub fiber_floor: f64,
+    pub fiber_known: bool,
+    pub fiber_met: bool,
+    /// Vitamins/minerals vs the daily reference (from rows that have data).
+    pub micros: Vec<MicroView>,
     pub plan: Vec<PlanMealView>,
     pub meals: Vec<MealGroup>,
     pub meds: Vec<DoseView>,
@@ -129,6 +136,10 @@ pub struct LogInput {
     pub prot: f64,
     #[serde(default)]
     pub est: bool,
+    #[serde(default)]
+    pub fiber: Option<f64>,
+    #[serde(default)]
+    pub micros: Option<Micros>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -139,6 +150,8 @@ pub struct RecentFood {
     pub kcal: f64,
     pub prot: f64,
     pub est: bool,
+    pub fiber: Option<f64>,
+    pub micros: Option<Micros>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -158,6 +171,7 @@ pub struct EstimateView {
 pub struct QuickFill {
     pub kcal: f64,
     pub prot: f64,
+    pub fiber: Option<f64>,
     pub grams: f64,
     pub matched: String,
 }
@@ -317,12 +331,28 @@ pub struct HistDay {
     pub date: String,
     pub kcal: f64,
     pub prot: f64,
+    pub fiber: Option<f64>,
+    pub micros: Option<Micros>,
     pub mins: f64,
     pub taken: usize,
     pub due: usize,
     pub used: bool,
     pub prot_met: bool,
+    pub fiber_met: bool,
     pub over: bool,
+    pub target: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MicroView {
+    pub key: String,
+    pub label: String,
+    pub unit: String,
+    pub amount: f64,
+    pub reference: f64,
+    /// Percent of the daily reference; None when there's no data.
+    pub pct: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -330,18 +360,117 @@ pub struct HistDay {
 pub struct HistSummary {
     pub avg_kcal: f64,
     pub avg_prot: f64,
+    pub avg_fiber: Option<f64>,
     pub prot_days: usize,
+    pub fiber_days: usize,
+    pub food_days: usize,
     /// Percent of due doses taken, over days the app was used. None if nothing was due.
     pub adherence: Option<f64>,
     pub days_trained: usize,
     pub days_used: usize,
+    pub micros: Vec<MicroView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MedHist {
+    pub name: String,
+    pub taken: usize,
+    pub due: usize,
+    pub missed: usize,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Insight {
+    /// "warn", "info" or "good"
+    pub level: String,
+    pub title: String,
+    pub detail: String,
+}
+
+impl Insight {
+    fn warn(t: &str, d: &str) -> Insight {
+        Insight { level: "warn".into(), title: t.into(), detail: d.into() }
+    }
+    fn info(t: &str, d: &str) -> Insight {
+        Insight { level: "info".into(), title: t.into(), detail: d.into() }
+    }
+    fn good(t: &str, d: &str) -> Insight {
+        Insight { level: "good".into(), title: t.into(), detail: d.into() }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct History {
+    pub range: usize,
+    pub kcal_target: f64,
+    pub prot_floor: f64,
+    pub fiber_floor: f64,
+    /// Newest first.
     pub days: Vec<HistDay>,
     pub summary: HistSummary,
+    pub meds: Vec<MedHist>,
+    pub insights: Vec<Insight>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanAheadMeal {
+    pub idx: usize,
+    pub slot: String,
+    pub name: String,
+    pub kcal: f64,
+    pub prot: f64,
+    pub fiber: Option<f64>,
+    pub done: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanAheadDay {
+    pub date: String,
+    pub dow: u8,
+    pub is_today: bool,
+    /// Days from today (0 = today).
+    pub offset: i64,
+    pub meals: Vec<PlanAheadMeal>,
+    pub kcal: f64,
+    pub prot: f64,
+    pub fiber: f64,
+    pub over: bool,
+    pub prot_met: bool,
+    /// Slots (Breakfast/Lunch/Snack/Dinner) with nothing planned.
+    pub empty_slots: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanAhead {
+    pub days: Vec<PlanAheadDay>,
+    pub kcal_target: f64,
+    pub prot_floor: f64,
+    pub fiber_floor: f64,
+    pub planned_days: usize,
+    pub avg_kcal: f64,
+    pub avg_prot: f64,
+    /// The newest planned day before today, if any (for "copy last week").
+    pub has_earlier: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrainingSummary {
+    pub week_sessions: usize,
+    pub week_mins: f64,
+    pub week_kcal: f64,
+    /// Days since the last session; None if there is none.
+    pub last_days_ago: Option<i64>,
+    /// Minutes per sport over the last 28 days, biggest first.
+    pub by_kind: Vec<(String, f64)>,
+    /// Minutes per day for the last 28 days, oldest first.
+    pub daily: Vec<(String, f64)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -557,6 +686,29 @@ impl Core {
             .collect();
         let (kcal, prot) = self.totals(date);
         let (burn, _) = self.burn_on(date);
+        let (mut fiber, mut fiber_known, mut micros, mut micros_known) = (0.0, false, Micros::default(), false);
+        for (_, l) in self.store.all::<Log>().filter(|(_, l)| l.date == date) {
+            if let Some(f) = l.fiber {
+                fiber += f;
+                fiber_known = true;
+            }
+            if let Some(m) = &l.micros {
+                micros.add(m);
+                micros_known = true;
+            }
+        }
+        let micro_views: Vec<MicroView> = MICRO_NAMES
+            .iter()
+            .zip(micros.values().iter().zip(MICRO_REF.values().iter()))
+            .map(|((key, label, unit), (v, r))| MicroView {
+                key: key.to_string(),
+                label: label.to_string(),
+                unit: unit.to_string(),
+                amount: round1(*v),
+                reference: *r,
+                pct: micros_known.then(|| (v / r * 100.0).round()),
+            })
+            .collect();
         let target = training::day_target(s.kcal_target, burn, s.add_burn && burn > 0.0);
         let plan = self
             .store
@@ -595,6 +747,11 @@ impl Core {
             add_burn: s.add_burn,
             over: kcal > target,
             prot_met: prot >= s.prot_floor,
+            fiber: round1(fiber),
+            fiber_floor: s.fiber_floor,
+            fiber_known,
+            fiber_met: fiber_known && fiber >= s.fiber_floor,
+            micros: micro_views,
             plan,
             meals,
             meds: self.doses(date),
@@ -628,6 +785,8 @@ impl Core {
             prot: round1(input.prot),
             est: input.est,
             ts: self.now(),
+            fiber: input.fiber.filter(|f| f.is_finite() && *f >= 0.0).map(|f| round1(f.min(300.0))),
+            micros: input.micros.map(|m| m.clamped().rounded()),
         };
         self.store.put(&id, log)?;
         Ok(id)
@@ -655,6 +814,8 @@ impl Core {
                     prot: round1(it.prot.clamp(0.0, 500.0)),
                     est: it.est,
                     ts: now + i as i64,
+                    fiber: it.fiber.filter(|f| f.is_finite()).map(|f| round1(f.clamp(0.0, 300.0))),
+                    micros: it.micros.map(|m| m.clamped().rounded()),
                 };
                 s.put(&new_id(), log)?;
                 n += 1;
@@ -706,6 +867,8 @@ impl Core {
                 prot: m.prot,
                 est: false,
                 ts: now,
+                fiber: m.fiber,
+                micros: None,
             };
             self.store.put(&id, log)?;
             m.done = true;
@@ -782,7 +945,15 @@ impl Core {
         let mut out = vec![];
         for l in logs {
             if seen.insert(l.name.to_lowercase()) {
-                out.push(RecentFood { name: l.name.clone(), grams: l.grams, kcal: l.kcal, prot: l.prot, est: l.est });
+                out.push(RecentFood {
+                    name: l.name.clone(),
+                    grams: l.grams,
+                    kcal: l.kcal,
+                    prot: l.prot,
+                    est: l.est,
+                    fiber: l.fiber,
+                    micros: l.micros,
+                });
                 if out.len() == 8 {
                     break;
                 }
@@ -867,7 +1038,8 @@ impl Core {
         let learned = self.learned();
         let f = food::match_food(&food::words(name), &learned)?;
         let (kcal, prot, grams) = food::quick(name, grams, &learned)?;
-        Some(QuickFill { kcal, prot, grams, matched: food::capitalize(&f.name) })
+        let (fiber, _) = food::extras(&f, grams);
+        Some(QuickFill { kcal, prot, fiber, grams, matched: food::capitalize(&f.name) })
     }
 
     pub fn food_names(&self) -> Vec<String> {
@@ -1420,6 +1592,124 @@ impl Core {
         }
     }
 
+    /// Today and the next `days - 1` days, with totals against your targets.
+    pub fn plan_ahead(&self, days: usize) -> PlanAhead {
+        let today = self.today();
+        let s = self.store.settings();
+        let mut out = vec![];
+        let (mut sk, mut sp, mut n) = (0.0, 0.0, 0);
+        for i in 0..days.clamp(1, 28) as i64 {
+            let d = dates::add_days(&today, i);
+            let meals: Vec<PlanAheadMeal> = self
+                .store
+                .get::<Plan>(&d)
+                .map(|p| {
+                    p.meals
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, m)| PlanAheadMeal {
+                            idx,
+                            slot: m.slot.clone(),
+                            name: m.name.clone(),
+                            kcal: m.kcal,
+                            prot: m.prot,
+                            fiber: m.fiber,
+                            done: m.done,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let kcal: f64 = meals.iter().map(|m| m.kcal).sum();
+            let prot: f64 = meals.iter().map(|m| m.prot).sum();
+            let fiber: f64 = meals.iter().filter_map(|m| m.fiber).sum();
+            if !meals.is_empty() {
+                sk += kcal;
+                sp += prot;
+                n += 1;
+            }
+            let empty_slots = MEALS.iter().filter(|slot| !meals.iter().any(|m| m.slot == **slot)).map(|s| s.to_string()).collect();
+            out.push(PlanAheadDay {
+                dow: dates::weekday(&d),
+                is_today: i == 0,
+                offset: i,
+                over: kcal > s.kcal_target,
+                prot_met: prot >= s.prot_floor,
+                date: d,
+                meals,
+                kcal: kcal.round(),
+                prot: round1(prot),
+                fiber: round1(fiber),
+                empty_slots,
+            });
+        }
+        let has_earlier = self.store.all::<Plan>().any(|(d, p)| !p.meals.is_empty() && dates::days_between(d, &today) > 0);
+        PlanAhead {
+            days: out,
+            kcal_target: s.kcal_target,
+            prot_floor: s.prot_floor,
+            fiber_floor: s.fiber_floor,
+            planned_days: n,
+            avg_kcal: if n > 0 { (sk / n as f64).round() } else { 0.0 },
+            avg_prot: if n > 0 { round1(sp / n as f64) } else { 0.0 },
+            has_earlier,
+        }
+    }
+
+    /// Add one meal to a day's plan.
+    pub fn add_plan_meal(&mut self, date: &str, meal: PlanMeal) -> Result<()> {
+        let mut meals = self.store.get::<Plan>(date).map(|p| p.meals.clone()).unwrap_or_default();
+        meals.push(PlanMeal { done: false, log_id: None, ..meal });
+        self.set_plan(date, meals)
+    }
+
+    /// Remove one meal from a day's plan (and its log row if it was ticked).
+    pub fn remove_plan_meal(&mut self, date: &str, idx: usize) -> Result<()> {
+        let mut meals = self.store.get::<Plan>(date).map(|p| p.meals.clone()).unwrap_or_default();
+        if idx >= meals.len() {
+            return Err("That meal isn't in the plan any more.".into());
+        }
+        meals.remove(idx);
+        self.set_plan(date, meals)
+    }
+
+    /// This week's training at a glance.
+    pub fn training_summary(&self) -> TrainingSummary {
+        let today = self.today();
+        let mut week = (0, 0.0, 0.0);
+        let mut kinds: BTreeMap<String, f64> = BTreeMap::new();
+        let mut daily: BTreeMap<String, f64> = BTreeMap::new();
+        for i in 0..28 {
+            daily.insert(dates::add_days(&today, -i), 0.0);
+        }
+        let mut last: Option<i64> = None;
+        for (_, w) in self.store.all::<Workout>() {
+            let ago = dates::days_between(&w.date, &today);
+            if ago < 0 {
+                continue;
+            }
+            last = Some(last.map_or(ago, |l: i64| l.min(ago)));
+            if ago < 7 {
+                week.0 += 1;
+                week.1 += w.mins;
+                week.2 += w.kcal;
+            }
+            if ago < 28 {
+                *kinds.entry(w.kind.clone()).or_default() += w.mins;
+                *daily.entry(w.date.clone()).or_default() += w.mins;
+            }
+        }
+        let mut by_kind: Vec<(String, f64)> = kinds.into_iter().collect();
+        by_kind.sort_by(|a, b| b.1.total_cmp(&a.1));
+        TrainingSummary {
+            week_sessions: week.0,
+            week_mins: week.1,
+            week_kcal: week.2.round(),
+            last_days_ago: last,
+            by_kind,
+            daily: daily.into_iter().collect(),
+        }
+    }
+
     /// Copy the latest 7 planned days forward by 7 days, skipping planned days; ticks reset.
     pub fn repeat_last_week(&mut self) -> Result<usize> {
         let mut planned: Vec<(String, Plan)> = self
@@ -1449,68 +1739,253 @@ impl Core {
     // ---------- History ----------
 
     pub fn history(&self) -> History {
+        self.history_range(60)
+    }
+
+    /// The last `range` days (14, 30 or 60), trimmed to the first day used, with
+    /// series for charts, per-medicine adherence and "what's missing" insights.
+    pub fn history_range(&self, range: usize) -> History {
+        let range = range.clamp(7, 60) as i64;
         let today = self.today();
-        let start = dates::add_days(&today, -59);
+        let start = dates::add_days(&today, 1 - range);
         let s = self.store.settings();
-        let mut food: HashMap<&str, (f64, f64)> = HashMap::new();
+        #[derive(Default, Clone, Copy)]
+        struct Acc {
+            kcal: f64,
+            prot: f64,
+            fiber: f64,
+            fiber_known: bool,
+            micros: Micros,
+            micros_known: bool,
+            rows: usize,
+            fiber_rows: usize,
+        }
+        let mut food: HashMap<&str, Acc> = HashMap::new();
         for (_, l) in self.store.all::<Log>() {
             let e = food.entry(l.date.as_str()).or_default();
-            e.0 += l.kcal;
-            e.1 += l.prot;
+            e.kcal += l.kcal;
+            e.prot += l.prot;
+            e.rows += 1;
+            if let Some(f) = l.fiber {
+                e.fiber += f;
+                e.fiber_known = true;
+                e.fiber_rows += 1;
+            }
+            if let Some(m) = &l.micros {
+                e.micros.add(m);
+                e.micros_known = true;
+            }
         }
         let mut mins: HashMap<&str, f64> = HashMap::new();
+        let mut burns: HashMap<&str, f64> = HashMap::new();
         for (_, w) in self.store.all::<Workout>() {
             *mins.entry(w.date.as_str()).or_default() += w.mins;
+            *burns.entry(w.date.as_str()).or_default() += w.kcal;
         }
         let mut ticks: HashSet<(&str, &str)> = HashSet::new();
+        let mut tick_days: HashSet<&str> = HashSet::new();
         for (_, t) in self.store.all::<MedLog>() {
             ticks.insert((t.date.as_str(), t.med_id.as_str()));
+            tick_days.insert(t.date.as_str());
         }
         let medlist: Vec<(&String, &Med)> = self.store.all::<Med>().collect();
-        let used = |d: &str| food.contains_key(d) || mins.contains_key(d) || ticks.iter().any(|(td, _)| *td == d);
-        // Trim to the first day used.
+        let used = |d: &str| food.contains_key(d) || mins.contains_key(d) || tick_days.contains(d);
         let mut first = start.clone();
         while first <= today && !used(&first) {
             first = dates::add_days(&first, 1);
         }
         let mut days = vec![];
+        let mut med_hist: BTreeMap<String, (String, usize, usize)> = BTreeMap::new(); // group -> (name, taken, due)
         let mut d = first;
         while d <= today {
-            let (k, p) = food.get(d.as_str()).copied().unwrap_or_default();
+            let a = food.get(d.as_str()).copied().unwrap_or_default();
             let m = mins.get(d.as_str()).copied().unwrap_or(0.0);
-            let due: Vec<&String> = medlist.iter().filter(|(_, x)| meds::is_due(x, &d)).map(|(id, _)| *id).collect();
-            let taken = due.iter().filter(|id| ticks.contains(&(d.as_str(), id.as_str()))).count();
-            let burn: f64 = self.store.all::<Workout>().filter(|(_, w)| w.date == d).map(|(_, w)| w.kcal).sum();
-            let target = training::day_target(s.kcal_target, burn, s.add_burn);
+            let due: Vec<(&String, &Med)> = medlist.iter().filter(|(_, x)| meds::is_due(x, &d)).copied().collect();
+            let is_used = used(&d);
+            let mut taken = 0;
+            for (id, med) in &due {
+                let t = ticks.contains(&(d.as_str(), id.as_str()));
+                taken += t as usize;
+                if is_used {
+                    let e = med_hist.entry(med.group_id.clone()).or_insert((med.name.clone(), 0, 0));
+                    e.0 = med.name.clone();
+                    e.1 += t as usize;
+                    e.2 += 1;
+                }
+            }
+            let target = training::day_target(s.kcal_target, burns.get(d.as_str()).copied().unwrap_or(0.0), s.add_burn);
             days.push(HistDay {
-                kcal: k.round(),
-                prot: round1(p),
+                kcal: a.kcal.round(),
+                prot: round1(a.prot),
+                fiber: a.fiber_known.then(|| round1(a.fiber)),
+                micros: a.micros_known.then(|| a.micros.rounded()),
                 mins: m,
                 taken,
                 due: due.len(),
-                used: used(&d),
-                prot_met: p >= s.prot_floor && p > 0.0,
-                over: k > target,
+                used: is_used,
+                prot_met: a.prot >= s.prot_floor && a.prot > 0.0,
+                fiber_met: a.fiber_known && a.fiber >= s.fiber_floor,
+                over: a.kcal > target,
+                target: target.round(),
                 date: d.clone(),
             });
             d = dates::add_days(&d, 1);
         }
         let used_days: Vec<&HistDay> = days.iter().filter(|d| d.used).collect();
-        let n = used_days.len();
-        let food_days: Vec<&&HistDay> = used_days.iter().filter(|d| d.kcal > 0.0 || d.prot > 0.0).collect();
+        let food_days: Vec<&HistDay> = days.iter().filter(|d| d.kcal > 0.0 || d.prot > 0.0).collect();
         let fd = food_days.len().max(1) as f64;
+        let fiber_days: Vec<f64> = food_days.iter().filter_map(|d| d.fiber).collect();
+        let micro_days: Vec<Micros> = food_days.iter().filter_map(|d| d.micros).collect();
         let due: usize = used_days.iter().map(|d| d.due).sum();
         let taken: usize = used_days.iter().map(|d| d.taken).sum();
+        let avg = |v: &[f64]| if v.is_empty() { 0.0 } else { v.iter().sum::<f64>() / v.len() as f64 };
+        let mut micro_avg = Micros::default();
+        for m in &micro_days {
+            micro_avg.add(m);
+        }
+        let micro_avg = if micro_days.is_empty() { micro_avg } else { micro_avg.scale(1.0 / micro_days.len() as f64) };
+        let micros: Vec<MicroView> = MICRO_NAMES
+            .iter()
+            .zip(micro_avg.values().iter().zip(MICRO_REF.values().iter()))
+            .map(|((key, label, unit), (v, r))| MicroView {
+                key: key.to_string(),
+                label: label.to_string(),
+                unit: unit.to_string(),
+                amount: round1(*v),
+                reference: *r,
+                pct: if micro_days.is_empty() { None } else { Some((v / r * 100.0).round()) },
+            })
+            .collect();
         let summary = HistSummary {
             avg_kcal: if food_days.is_empty() { 0.0 } else { (food_days.iter().map(|d| d.kcal).sum::<f64>() / fd).round() },
             avg_prot: if food_days.is_empty() { 0.0 } else { round1(food_days.iter().map(|d| d.prot).sum::<f64>() / fd) },
+            avg_fiber: (!fiber_days.is_empty()).then(|| round1(avg(&fiber_days))),
             prot_days: used_days.iter().filter(|d| d.prot_met).count(),
+            fiber_days: used_days.iter().filter(|d| d.fiber_met).count(),
+            food_days: food_days.len(),
             adherence: (due > 0).then(|| (taken as f64 * 100.0 / due as f64).round()),
             days_trained: days.iter().filter(|d| d.mins > 0.0).count(),
-            days_used: n,
+            days_used: used_days.len(),
+            micros,
         };
+        let meds: Vec<MedHist> =
+            med_hist.into_values().map(|(name, taken, due)| MedHist { name, taken, due, missed: due - taken }).collect();
+        let insights = self.insights(&days, &summary, &meds, &s);
         days.reverse(); // newest first
-        History { days, summary }
+        History {
+            range: range as usize,
+            kcal_target: s.kcal_target,
+            prot_floor: s.prot_floor,
+            fiber_floor: s.fiber_floor,
+            days,
+            summary,
+            meds,
+            insights,
+        }
+    }
+
+    fn insights(&self, days: &[HistDay], sum: &HistSummary, meds: &[MedHist], s: &Settings) -> Vec<Insight> {
+        let mut out = vec![];
+        let food: Vec<&HistDay> = days.iter().filter(|d| d.kcal > 0.0 || d.prot > 0.0).collect();
+        let n = food.len();
+        if days.is_empty() {
+            return vec![Insight::info(
+                "Nothing logged yet",
+                "Log a few days of food and this page will show what's working and what's missing.",
+            )];
+        }
+        let gaps = days.iter().filter(|d| d.kcal == 0.0 && d.date != self.today()).count();
+        if gaps > 0 {
+            out.push(Insight::info(
+                &format!("{gaps} day{} without food logged", if gaps == 1 { "" } else { "s" }),
+                "Averages only count days with food, so gaps can hide a pattern.",
+            ));
+        }
+        if n == 0 {
+            return out;
+        }
+        let tips = |which: &str| crate::food::richest(which, 4).join(", ");
+        let prot_short = food.iter().filter(|d| d.prot < s.prot_floor).count();
+        if prot_short == 0 {
+            out.push(Insight::good(
+                "Protein floor met every day",
+                &format!("Averaging {} g against your {} g floor.", sum.avg_prot, s.prot_floor),
+            ));
+        } else {
+            let mut top: Vec<(&str, f64)> = crate::food::TABLE.iter().map(|(n, _, p)| (*n, *p)).collect();
+            top.sort_by(|a, b| b.1.total_cmp(&a.1));
+            let names: Vec<String> = top.iter().take(4).map(|(n, _)| crate::food::capitalize(n)).collect();
+            out.push(Insight {
+                level: if prot_short * 3 > n { "warn" } else { "info" }.into(),
+                title: format!("Protein under {} g on {prot_short} of {n} days", s.prot_floor),
+                detail: format!("Average {} g. Highest per 100 g in your table: {}.", sum.avg_prot, names.join(", ")),
+            });
+        }
+        match sum.avg_fiber {
+            Some(f) if f < s.fiber_floor => out.push(Insight::warn(
+                &format!("Fiber averaged {f} g, under your {} g floor", s.fiber_floor),
+                &format!("Richest in your table: {}.", tips("fiber")),
+            )),
+            Some(f) => out.push(Insight::good("Fiber on track", &format!("Averaging {f} g against your {} g floor.", s.fiber_floor))),
+            None => out.push(Insight::info("No fiber data yet", "Foods logged from now on carry fiber; older entries don't.")),
+        }
+        let over = food.iter().filter(|d| d.over).count();
+        if over * 3 > n {
+            out.push(Insight::warn(
+                &format!("Over your calorie target on {over} of {n} days"),
+                &format!("Average {} kcal against {} kcal.", sum.avg_kcal, s.kcal_target),
+            ));
+        } else if sum.avg_kcal < s.kcal_target - 400.0 {
+            out.push(Insight::info(
+                &format!("Averaging {} kcal, well under target", sum.avg_kcal),
+                "A big deficit makes it harder to protect protein and muscle.",
+            ));
+        }
+        for m in &sum.micros {
+            if let Some(p) = m.pct {
+                if p < 60.0 {
+                    out.push(Insight::warn(
+                        &format!("{} at {p:.0}% of the daily amount", m.label),
+                        &format!(
+                            "About {} {} a day against {} {}, from food only (supplements not counted). Good sources: {}.",
+                            m.amount,
+                            m.unit,
+                            m.reference,
+                            m.unit,
+                            tips(&m.key)
+                        ),
+                    ));
+                }
+            }
+        }
+        let missed: Vec<&MedHist> = meds.iter().filter(|m| m.missed > 0).collect();
+        if meds.iter().any(|m| m.due > 0) && missed.is_empty() {
+            out.push(Insight::good("Every medicine dose taken", "Nothing missed in this period."));
+        }
+        for m in missed {
+            out.push(Insight {
+                level: if m.missed * 5 > m.due { "warn" } else { "info" }.into(),
+                title: format!("{} missed {} of {} times", m.name, m.missed, m.due),
+                detail: "Counting only days you used the app.".into(),
+            });
+        }
+        let last = days.iter().rev().position(|d| d.mins > 0.0);
+        match last {
+            Some(i) if i >= 4 => {
+                out.push(Insight::info(&format!("No training in the last {i} days"), "Even a walk counts — log it on the Training tab."))
+            }
+            None if days.len() >= 7 => {
+                out.push(Insight::info("No training logged in this period", "Log sessions on the Training tab to see burn here."))
+            }
+            _ => {}
+        }
+        // Warnings first, then info, then good news.
+        out.sort_by_key(|i| match i.level.as_str() {
+            "warn" => 0,
+            "info" => 1,
+            _ => 2,
+        });
+        out
     }
 
     // ---------- Settings ----------
@@ -1524,6 +1999,7 @@ impl Core {
         s.weight_kg = round1(s.weight_kg);
         s.kcal_target = s.kcal_target.round();
         s.prot_floor = s.prot_floor.round();
+        s.fiber_floor = s.fiber_floor.round();
         self.store.put("main", s)
     }
 

@@ -11,6 +11,26 @@ const CATS = ['cooked', 'chilled', 'produce', 'shelf', 'freezer'];
 const MET = { gym: 5, run: 9.8, walk: 3.5, cycle: 7.5, swim: 7, other: 4 };
 const TABLE = { 'chicken breast': [165, 31, 0], egg: [143, 12.6, 55], banana: [89, 1.1, 120], skyr: [63, 11, 0], oats: [370, 13, 0] };
 
+// Fiber and micros per 100 g: [fiber, vitC mg, vitD µg, B12 µg, iron mg, calcium mg]
+const EXTRA = {
+  skyr: [0, 0, 0, 0.5, 0.1, 120], oats: [10.1, 0, 0, 0, 4.3, 54], 'frozen raspberries': [6.5, 26, 0, 0, 0.7, 25], egg: [0, 0, 2, 0.9, 1.8, 56],
+  'wholegrain bread': [6, 0, 0, 0, 2.5, 100], 'chicken breast': [0, 0, 0.1, 0.3, 0.5, 15], 'rice cooked': [0.4, 0, 0, 0, 0.2, 10], 'smoked tofu': [1.5, 0, 0, 0, 2.5, 200],
+  'chickpeas drained': [7.6, 1.3, 0, 0, 1.5, 40], 'bell pepper roasted dry': [2, 100, 0, 0, 0.5, 9], 'cottage cheese': [0, 0, 0, 0.4, 0.1, 83], banana: [2.6, 8.7, 0, 0, 0.3, 5],
+  apple: [2.4, 4.6, 0, 0, 0.1, 6], 'protein pudding': [0, 0, 0, 0.3, 0.2, 120], erdnussmus: [6, 0, 0, 0, 1.9, 45], 'cooked prawns': [0, 0, 0, 1.5, 0.3, 70],
+  'chicken thigh roasted skin-off': [0, 0, 0.1, 0.4, 1, 10], 'firm tofu roasted dry': [2.5, 0, 0, 0, 3, 250], 'potato roasted dry': [2.2, 10, 0, 0, 1, 12],
+  'frozen spinach': [3, 2.2, 0, 0, 1.9, 150], roti: [4.5, 0, 0, 0, 2.5, 30], 'mystery dal': [5, 3, 0, 0, 2.5, 40],
+};
+function nutr(name, grams) {
+  const base = name.split(' · ')[0].replace(' (AI)', '').toLowerCase();
+  const g = grams || Number((name.match(/· (\d+) g/) || [])[1]) || 300;
+  const e = EXTRA[base];
+  if (!e) return {};
+  const f = g / 100;
+  return { fiber: r1(e[0] * f), micros: { vitC: r1(e[1] * f), vitD: r1(e[2] * f), b12: r1(e[3] * f), iron: r1(e[4] * f), calcium: Math.round(e[5] * f) } };
+}
+const MICROS = [['vitC', 'Vitamin C', 'mg', 90], ['vitD', 'Vitamin D', 'µg', 15], ['b12', 'Vitamin B12', 'µg', 2.4], ['iron', 'Iron', 'mg', 8], ['calcium', 'Calcium', 'mg', 1000]];
+const microViews = (sum, known) => MICROS.map(([key, label, unit, ref]) => ({ key, label, unit, amount: r1(sum[key] || 0), reference: ref, pct: known ? Math.round(((sum[key] || 0) / ref) * 100) : null }));
+
 let seq = 0;
 const id = () => `m${Date.now().toString(36)}${(seq++).toString(36)}`;
 const r1 = (x) => Math.round(x * 10) / 10;
@@ -26,7 +46,7 @@ const cmpDate = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 const db = {
   log: {}, plan: {}, stock: {}, list: {}, meds: {}, medlog: {}, workouts: {}, foods: {},
-  rules: '', settings: { addBurn: false, weightKg: 82, kcalTarget: 1500, protFloor: 90 },
+  rules: '', settings: { addBurn: false, weightKg: 82, kcalTarget: 1500, protFloor: 90, fiberFloor: 30 },
   ai: { order: ['claude', 'gemini'], geminiKey: '', geminiModel: 'gemini-flash-latest', claudeModel: '', claudePath: '' },
   aiAvailable: true,
   ts: 1,
@@ -72,18 +92,18 @@ function seedRich() {
     const meals = [pick(B, i, 0), pick(B, i, 1), pick(L, i, 0), pick(L, i, 2), pick(S, i, 0), pick(D, i, 0), pick(D, i, 1)];
     if (i % 4 === 0) meals.push(pick(S, i, 2));
     meals.slice(0, 5 + n).forEach(([name, kcal, prot, meal]) => {
-      db.log[`d${i}-${name}`] = { date: d, meal, name, grams: null, kcal, prot, est: name.includes('AI'), ts: db.ts++ };
+      db.log[`d${i}-${name}`] = { date: d, meal, name, grams: null, kcal, prot, est: name.includes('AI'), ts: db.ts++, ...nutr(name) };
     });
-    if (i % 2 === 0) db.workouts[`w${i}`] = { date: d, kind: ['gym', 'run', 'walk', 'cycle'][i % 4], mins: [55, 35, 70, 45][i % 4], kcal: [478, 563, 351, 564][i % 4], name: ['Upper body', 'Lake run', 'Uetliberg hike', 'Spin class'][i % 4], ts: db.ts++ };
+    if (i % 2 === 0) { const k = (i / 2) % 4; db.workouts[`w${i}`] = { date: d, kind: ['gym', 'run', 'walk', 'cycle'][k], mins: [55, 35, 70, 45][k], kcal: [478, 563, 351, 564][k], name: ['Upper body', 'Lake run', 'Uetliberg hike', 'Spin class'][k], ts: db.ts++ }; }
   }
   // Today so far
-  db.log.t1 = { date: TODAY, meal: 'Breakfast', name: 'Skyr · 200 g', grams: 200, kcal: 126, prot: 22, est: false, ts: db.ts++ };
-  db.log.t2 = { date: TODAY, meal: 'Breakfast', name: 'Oats · 50 g', grams: 50, kcal: 185, prot: 6.5, est: false, ts: db.ts++ };
+  db.log.t1 = { date: TODAY, meal: 'Breakfast', name: 'Skyr · 200 g', grams: 200, kcal: 126, prot: 22, est: false, ts: db.ts++, ...nutr('Skyr · 200 g') };
+  db.log.t2 = { date: TODAY, meal: 'Breakfast', name: 'Oats · 50 g', grams: 50, kcal: 185, prot: 6.5, est: false, ts: db.ts++, ...nutr('Oats · 50 g') };
   // Plans: last week and the coming days
   const plans = [
-    [{ slot: 'Lunch', name: 'Tofu bowl', kcal: 520, prot: 38 }, { slot: 'Dinner', name: 'Chicken, potatoes, spinach', kcal: 610, prot: 52 }],
-    [{ slot: 'Lunch', name: 'Chickpea salad', kcal: 450, prot: 22 }, { slot: 'Dinner', name: 'Prawns and rice', kcal: 520, prot: 36 }],
-    [{ slot: 'Lunch', name: 'Cottage cheese wrap', kcal: 430, prot: 34 }, { slot: 'Dinner', name: 'Dal with roti', kcal: 650, prot: 29 }],
+    [{ slot: 'Breakfast', name: 'Skyr, oats, raspberries', kcal: 360, prot: 31, fiber: 9 }, { slot: 'Lunch', name: 'Tofu bowl', kcal: 520, prot: 38, fiber: 8 }, { slot: 'Dinner', name: 'Chicken, potatoes, spinach', kcal: 610, prot: 52, fiber: 7 }],
+    [{ slot: 'Breakfast', name: 'Eggs on toast', kcal: 390, prot: 21, fiber: 5 }, { slot: 'Lunch', name: 'Chickpea salad', kcal: 450, prot: 22, fiber: 12 }, { slot: 'Snack', name: 'Protein pudding', kcal: 160, prot: 20, fiber: 0 }, { slot: 'Dinner', name: 'Prawns and rice', kcal: 520, prot: 36, fiber: 2 }],
+    [{ slot: 'Lunch', name: 'Cottage cheese wrap', kcal: 430, prot: 34, fiber: 6 }, { slot: 'Dinner', name: 'Dal with roti', kcal: 650, prot: 29, fiber: 14 }],
   ];
   for (let i = -6; i <= 4; i++) db.plan[addDays(TODAY, i)] = { meals: plans[(i + 6) % 3].map((m) => ({ ...m, done: false })) };
   // Medicines
@@ -136,10 +156,13 @@ function getDay({ date }) {
   const ids = planIds(date);
   const logs = live('log').filter(([, l]) => l.date === date).sort((a, b) => a[1].ts - b[1].ts);
   const groups = {};
-  let kcal = 0, prot = 0;
+  let kcal = 0, prot = 0, fiber = 0, fiberKnown = false, microsKnown = false;
+  const msum = {};
   for (const [lid, l] of logs) {
     const g = (groups[l.meal] ||= { meal: l.meal, kcal: 0, prot: 0, rows: [] });
     g.kcal += l.kcal; g.prot += l.prot; kcal += l.kcal; prot += l.prot;
+    if (l.fiber != null) { fiber += l.fiber; fiberKnown = true; }
+    if (l.micros) { microsKnown = true; for (const k in l.micros) msum[k] = (msum[k] || 0) + l.micros[k]; }
     g.rows.push({ id: lid, name: l.name, grams: l.grams, kcal: l.kcal, prot: l.prot, est: l.est, fromPlan: ids.has(lid) });
   }
   const ws = live('workouts').filter(([, w]) => w.date === date);
@@ -157,6 +180,7 @@ function getDay({ date }) {
   return {
     date, today: TODAY, isToday: date === TODAY, kcal: Math.round(kcal), prot: r1(prot), target, kcalTarget: s.kcalTarget, protFloor: s.protFloor,
     burn: b, addBurn: s.addBurn, over: kcal > target, protMet: prot >= s.protFloor,
+    fiber: r1(fiber), fiberFloor: s.fiberFloor, fiberKnown, fiberMet: fiberKnown && fiber >= s.fiberFloor, micros: microViews(msum, microsKnown),
     plan: (db.plan[date]?.meals || []).map((m, idx) => ({ idx, slot: m.slot, name: m.name, kcal: m.kcal, prot: m.prot, done: !!m.done })),
     meals: MEALS.filter((m) => groups[m]).map((m) => ({ ...groups[m], kcal: Math.round(groups[m].kcal), prot: r1(groups[m].prot) })),
     meds, workouts: ws.map(([wid, w]) => ({ id: wid, kind: w.kind, mins: w.mins, kcal: w.kcal, name: w.name })),
@@ -172,7 +196,7 @@ function place(part) {
     if (!t.includes(name)) continue;
     const grams = g ? Number(g[1]) : piece ? (n ? Number(n[1]) : 1) * piece : null;
     if (!grams) return null;
-    return { name: `${name[0].toUpperCase()}${name.slice(1)} · ${grams} g`, grams, kcal: Math.round(k * grams / 100), prot: r1(p * grams / 100), est: !g, meal: guess(HHMM) };
+    return { name: `${name[0].toUpperCase()}${name.slice(1)} · ${grams} g`, grams, kcal: Math.round(k * grams / 100), prot: r1(p * grams / 100), est: !g, meal: guess(HHMM), ...nutr(name, grams) };
   }
   return null;
 }
@@ -188,7 +212,7 @@ function estimate({ text }) {
   const v = { items, unknown, note: '', provider: null, providerText: null, error: null, meal: guess(HHMM) };
   if (unknown.length) {
     if (db.aiAvailable) {
-      for (const u of unknown) v.items.push({ name: u.slice(0, 80), grams: 250, kcal: 400, prot: 20, est: true, meal: guess(HHMM) });
+      for (const u of unknown) v.items.push({ name: u.slice(0, 80), grams: 250, kcal: 400, prot: 20, est: true, meal: guess(HHMM), fiber: 6, micros: { vitC: 12, vitD: 0, b12: 0.4, iron: 2.1, calcium: 80 } });
       v.unknown = [];
       v.provider = 'claude';
       v.providerText = 'Claude worked it out';
@@ -298,36 +322,89 @@ function weekView() {
   return { days, avgKcal: n ? Math.round(sk / n) : 0, avgProt: n ? r1(sp / n) : 0, plannedDays: n };
 }
 
-function history() {
-  const food = {}, mins = {}, ticks = new Set();
-  for (const [, l] of live('log')) { const e = (food[l.date] ||= [0, 0]); e[0] += l.kcal; e[1] += l.prot; }
-  for (const [, w] of live('workouts')) mins[w.date] = (mins[w.date] || 0) + w.mins;
+function history({ range = 60 } = {}) {
+  const st = db.settings;
+  const food = {}, mins = {}, burns = {}, ticks = new Set();
+  for (const [, l] of live('log')) {
+    const e = (food[l.date] ||= { kcal: 0, prot: 0, fiber: 0, fk: false, m: {}, mk: false });
+    e.kcal += l.kcal; e.prot += l.prot;
+    if (l.fiber != null) { e.fiber += l.fiber; e.fk = true; }
+    if (l.micros) { e.mk = true; for (const k in l.micros) e.m[k] = (e.m[k] || 0) + l.micros[k]; }
+  }
+  for (const [, w] of live('workouts')) { mins[w.date] = (mins[w.date] || 0) + w.mins; burns[w.date] = (burns[w.date] || 0) + w.kcal; }
   for (const k of Object.keys(db.medlog)) ticks.add(k);
   const used = (d) => !!food[d] || !!mins[d] || [...ticks].some((t) => t.startsWith(d));
-  let first = addDays(TODAY, -59);
+  let first = addDays(TODAY, 1 - range);
   while (first <= TODAY && !used(first)) first = addDays(first, 1);
-  const days = [];
+  const days = [], medHist = {};
   for (let d = first; d <= TODAY; d = addDays(d, 1)) {
-    const [k, p] = food[d] || [0, 0];
+    const f = food[d] || { kcal: 0, prot: 0, fiber: 0, fk: false, m: {}, mk: false };
     const due = live('meds').filter(([, m]) => isDue(m, d));
-    const taken = due.filter(([mid]) => ticks.has(`${d}_${mid}`)).length;
-    days.push({ date: d, kcal: Math.round(k), prot: r1(p), mins: mins[d] || 0, taken, due: due.length, used: used(d), protMet: p >= db.settings.protFloor, over: k > db.settings.kcalTarget });
+    let taken = 0;
+    for (const [mid, m] of due) {
+      const t = ticks.has(`${d}_${mid}`);
+      taken += t;
+      if (used(d)) { const h = (medHist[m.groupId] ||= { name: m.name, taken: 0, due: 0 }); h.taken += t; h.due++; }
+    }
+    const target = st.kcalTarget + (st.addBurn ? burns[d] || 0 : 0);
+    days.push({ date: d, kcal: Math.round(f.kcal), prot: r1(f.prot), fiber: f.fk ? r1(f.fiber) : null, micros: f.mk ? f.m : null, mins: mins[d] || 0, taken, due: due.length, used: used(d),
+      protMet: f.prot >= st.protFloor && f.prot > 0, fiberMet: f.fk && f.fiber >= st.fiberFloor, over: f.kcal > target, target: Math.round(target) });
   }
   const u = days.filter((d) => d.used);
-  const fd = u.filter((d) => d.kcal > 0);
+  const fd = days.filter((d) => d.kcal > 0);
+  const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+  const fib = fd.filter((d) => d.fiber != null).map((d) => d.fiber);
+  const md = fd.filter((d) => d.micros);
+  const msum = {};
+  for (const d of md) for (const k in d.micros) msum[k] = (msum[k] || 0) + d.micros[k] / md.length;
   const due = u.reduce((a, d) => a + d.due, 0), taken = u.reduce((a, d) => a + d.taken, 0);
-  days.reverse();
-  return {
-    days,
-    summary: {
-      avgKcal: fd.length ? Math.round(fd.reduce((a, d) => a + d.kcal, 0) / fd.length) : 0,
-      avgProt: fd.length ? r1(fd.reduce((a, d) => a + d.prot, 0) / fd.length) : 0,
-      protDays: u.filter((d) => d.protMet).length,
-      adherence: due ? Math.round((taken * 100) / due) : null,
-      daysTrained: days.filter((d) => d.mins > 0).length,
-      daysUsed: u.length,
-    },
+  const summary = {
+    avgKcal: Math.round(avg(fd.map((d) => d.kcal))), avgProt: r1(avg(fd.map((d) => d.prot))), avgFiber: fib.length ? r1(avg(fib)) : null,
+    protDays: u.filter((d) => d.protMet).length, fiberDays: u.filter((d) => d.fiberMet).length, foodDays: fd.length,
+    adherence: due ? Math.round((taken * 100) / due) : null, daysTrained: days.filter((d) => d.mins > 0).length, daysUsed: u.length,
+    micros: microViews(msum, md.length > 0),
   };
+  const meds = Object.values(medHist).map((m) => ({ ...m, missed: m.due - m.taken }));
+  const ins = [];
+  const short = fd.filter((d) => d.prot < st.protFloor).length;
+  if (short) ins.push({ level: short * 3 > fd.length ? 'warn' : 'info', title: `Protein under ${st.protFloor} g on ${short} of ${fd.length} days`, detail: `Average ${summary.avgProt} g. Highest per 100 g in your table: Soy granulate dry, Chicken breast, Erdnussmus, Cooked prawns.` });
+  if (summary.avgFiber != null && summary.avgFiber < st.fiberFloor) ins.push({ level: 'warn', title: `Fiber averaged ${summary.avgFiber} g, under your ${st.fiberFloor} g floor`, detail: 'Richest in your table: Ground flaxseed, Soy granulate dry, Oats, Chickpeas drained.' });
+  for (const m of summary.micros) if (m.pct != null && m.pct < 60) ins.push({ level: 'warn', title: `${m.label} at ${m.pct}% of the daily amount`, detail: `About ${m.amount} ${m.unit} a day against ${m.reference} ${m.unit}, from food only (supplements not counted).` });
+  for (const m of meds.filter((m) => m.missed)) ins.push({ level: m.missed * 5 > m.due ? 'warn' : 'info', title: `${m.name} missed ${m.missed} of ${m.due} times`, detail: 'Counting only days you used the app.' });
+  const over = fd.filter((d) => d.over).length;
+  if (over * 3 > fd.length) ins.push({ level: 'warn', title: `Over your calorie target on ${over} of ${fd.length} days`, detail: `Average ${summary.avgKcal} kcal against ${st.kcalTarget} kcal.` });
+  if (!short && fd.length) ins.push({ level: 'good', title: 'Protein floor met every day', detail: `Averaging ${summary.avgProt} g.` });
+  ins.sort((a, b) => ['warn', 'info', 'good'].indexOf(a.level) - ['warn', 'info', 'good'].indexOf(b.level));
+  days.reverse();
+  return { range, kcalTarget: st.kcalTarget, protFloor: st.protFloor, fiberFloor: st.fiberFloor, days, summary, meds, insights: ins };
+}
+
+function planAhead({ days = 7 }) {
+  const st = db.settings;
+  const out = [];
+  let sk = 0, sp = 0, n = 0;
+  for (let i = 0; i < days; i++) {
+    const d = addDays(TODAY, i);
+    const meals = (db.plan[d]?.meals || []).map((m, idx) => ({ idx, slot: m.slot, name: m.name, kcal: m.kcal, prot: m.prot, fiber: m.fiber ?? null, done: !!m.done }));
+    const kcal = meals.reduce((a, m) => a + m.kcal, 0), prot = meals.reduce((a, m) => a + m.prot, 0), fiber = meals.reduce((a, m) => a + (m.fiber || 0), 0);
+    if (meals.length) { sk += kcal; sp += prot; n++; }
+    out.push({ date: d, dow: dow(d), isToday: i === 0, offset: i, meals, kcal, prot: r1(prot), fiber: r1(fiber), over: kcal > st.kcalTarget, protMet: prot >= st.protFloor, emptySlots: MEALS.filter((s) => !meals.some((m) => m.slot === s)) });
+  }
+  return { days: out, kcalTarget: st.kcalTarget, protFloor: st.protFloor, fiberFloor: st.fiberFloor, plannedDays: n, avgKcal: n ? Math.round(sk / n) : 0, avgProt: n ? r1(sp / n) : 0, hasEarlier: Object.entries(db.plan).some(([d, p]) => d < TODAY && p.meals.length) };
+}
+
+function trainingSummary() {
+  const kinds = {}, daily = {};
+  for (let i = 27; i >= 0; i--) daily[addDays(TODAY, -i)] = 0;
+  let wk = [0, 0, 0], last = null;
+  for (const [, w] of live('workouts')) {
+    const ago = Math.round((new Date(TODAY) - new Date(w.date)) / 864e5);
+    if (ago < 0) continue;
+    last = last == null ? ago : Math.min(last, ago);
+    if (ago < 7) { wk[0]++; wk[1] += w.mins; wk[2] += w.kcal; }
+    if (ago < 28) { kinds[w.kind] = (kinds[w.kind] || 0) + w.mins; daily[w.date] = (daily[w.date] || 0) + w.mins; }
+  }
+  return { weekSessions: wk[0], weekMins: wk[1], weekKcal: Math.round(wk[2]), lastDaysAgo: last, byKind: Object.entries(kinds).sort((a, b) => b[1] - a[1]), daily: Object.entries(daily) };
 }
 
 const handlers = {
@@ -337,11 +414,11 @@ const handlers = {
     if (!entry.name.trim()) throw 'Give the food a name.';
     if (!(entry.kcal > 0 && entry.kcal < 5000)) throw 'Calories must be above 0 and below 5000.';
     const lid = id();
-    db.log[lid] = { date, meal: meal(entry.meal), name: entry.name, grams: entry.grams, kcal: Math.round(entry.kcal), prot: r1(entry.prot), est: !!entry.est, ts: db.ts++ };
+    db.log[lid] = { date, meal: meal(entry.meal), name: entry.name, grams: entry.grams, kcal: Math.round(entry.kcal), prot: r1(entry.prot), est: !!entry.est, ts: db.ts++, fiber: entry.fiber ?? null, micros: entry.micros ?? null };
     return lid;
   },
   save_items: ({ date, items }) => {
-    for (const it of items) db.log[id()] = { date, meal: meal(it.meal), name: it.name, grams: it.grams, kcal: it.kcal, prot: it.prot, est: it.est, ts: db.ts++ };
+    for (const it of items) db.log[id()] = { date, meal: meal(it.meal), name: it.name, grams: it.grams, kcal: it.kcal, prot: it.prot, est: it.est, ts: db.ts++, fiber: it.fiber, micros: it.micros };
     return items.length;
   },
   delete_log: ({ id: lid }) => {
@@ -367,7 +444,7 @@ const handlers = {
     for (const [, l] of live('log').sort((a, b) => b[1].ts - a[1].ts)) {
       if (seen.has(l.name.toLowerCase())) continue;
       seen.add(l.name.toLowerCase());
-      out.push({ name: l.name, grams: l.grams, kcal: l.kcal, prot: l.prot, est: l.est });
+      out.push({ name: l.name, grams: l.grams, kcal: l.kcal, prot: l.prot, est: l.est, fiber: l.fiber, micros: l.micros });
       if (out.length === 8) break;
     }
     return out;
@@ -382,7 +459,7 @@ const handlers = {
     if (!k) return null;
     const [kc, p, piece] = TABLE[k];
     const g = grams || piece || 100;
-    return { kcal: Math.round(kc * g / 100), prot: r1(p * g / 100), grams: g, matched: k[0].toUpperCase() + k.slice(1) };
+    return { kcal: Math.round(kc * g / 100), prot: r1(p * g / 100), fiber: nutr(k, g).fiber ?? null, grams: g, matched: k[0].toUpperCase() + k.slice(1) };
   },
   food_names: () => Object.keys(TABLE).map((n) => n[0].toUpperCase() + n.slice(1)),
   get_meds: medsView,
@@ -471,9 +548,14 @@ const handlers = {
     return n;
   },
   get_history: history,
+  get_plan_ahead: planAhead,
+  add_plan_meal: ({ date, meal: m }) => { (db.plan[date] ||= { meals: [] }).meals.push({ ...m, done: false, logId: null }); },
+  remove_plan_meal: ({ date, idx }) => { const p = db.plan[date]; if (p) { const [m] = p.meals.splice(idx, 1); if (m?.logId) delete db.log[m.logId]; } },
+  training_summary: trainingSummary,
   get_settings: () => ({ ...db.settings }),
   save_settings: ({ settings }) => {
     if (!(settings.weightKg >= 30 && settings.weightKg <= 300)) throw 'Weight must be between 30 and 300 kg.';
+    if (!(settings.fiberFloor >= 0 && settings.fiberFloor <= 100)) throw 'Fiber floor must be between 0 and 100 g.';
     db.settings = { ...settings };
   },
   get_ai_settings: () => ({ order: db.ai.order, geminiKeySet: !!db.ai.geminiKey, geminiModel: db.ai.geminiModel, claudeModel: db.ai.claudeModel, claudePath: db.ai.claudePath, claudeFound: '/Users/me/.local/bin/claude' }),

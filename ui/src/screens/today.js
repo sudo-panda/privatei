@@ -93,6 +93,14 @@ function render() {
     h('div', { class: 'row spread' }, h('h3', { text: 'Protein' }), h('span', { class: `small ${d.protMet ? 'ok' : 'muted'}`, text: d.protMet ? 'Floor reached' : `${n1(d.protFloor - d.prot)} g to go` })),
     h('div', { class: 'row' }, h('span', { class: 'big', 'data-testid': 'prot', text: n1(d.prot) }), h('span', { class: 'muted num', text: `/ ${n0(d.protFloor)} g` })),
     h('div', { class: `bar prot ${d.protMet ? 'good' : ''}`, role: 'progressbar', 'aria-label': 'Protein against floor', 'aria-valuemin': 0, 'aria-valuemax': n0(d.protFloor), 'aria-valuenow': n1(d.prot) }, h('span', { style: `width:${pPct}%` })),
+    h('div', { class: 'row spread' }, h('h3', { text: 'Fiber' }), h('span', { class: `small ${d.fiberMet ? 'ok' : 'muted'}`, text: !d.fiberKnown ? 'no fiber data yet' : d.fiberMet ? 'Floor reached' : `${n1(d.fiberFloor - d.fiber)} g to go` })),
+    h('div', { class: 'row' }, h('span', { class: 'big', 'data-testid': 'fiber', text: n1(d.fiber) }), h('span', { class: 'muted num', text: `/ ${n0(d.fiberFloor)} g` })),
+    h('div', { class: `bar fiber ${d.fiberMet ? 'good' : ''}`, role: 'progressbar', 'aria-label': 'Fiber against floor', 'aria-valuemin': 0, 'aria-valuemax': n0(d.fiberFloor), 'aria-valuenow': n1(d.fiber) }, h('span', { style: `width:${Math.min(100, (d.fiber / Math.max(1, d.fiberFloor)) * 100)}%` })),
+    d.micros.some((m) => m.pct !== null)
+      ? h('div', { class: 'micro-row', 'aria-label': 'Vitamins and minerals today' }, d.micros.map((m) =>
+          h('span', { class: `micro ${m.pct >= 100 ? 'ok' : m.pct >= 50 ? 'mid' : 'short'}`, title: `${m.label}: ${n1(m.amount)} ${m.unit} of ${m.reference} ${m.unit}` },
+            h('span', { class: 'micro-name', text: m.label.replace('Vitamin ', 'Vit ') }), h('b', { class: 'num', text: `${n0(m.pct)}%` }))))
+      : null,
     d.burn > 0
       ? h(
           'label',

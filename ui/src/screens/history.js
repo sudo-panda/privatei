@@ -1,0 +1,118 @@
+import { h, fill, n0, n1, dayLabel } from '../dom.js';
+import { call } from '../api.js';
+import { state, go } from '../state.js';
+import { barChart, pctBars } from '../charts.js';
+
+let els = {};
+let range = 30;
+
+const short = (d) => {
+  const [, m, dd] = d.split('-').map(Number);
+  return `${dd}.${m}`;
+};
+
+function mount(root) {
+  const seg = h('div', { class: 'segment', role: 'group', 'aria-label': 'Period' });
+  for (const r of [14, 30, 60]) {
+    seg.append(h('button', { type: 'button', 'data-range': r, 'aria-pressed': String(r === range), onclick: () => { range = r; for (const b of seg.children) b.setAttribute('aria-pressed', String(Number(b.dataset.range) === r)); refresh(); } }, `${r} days`));
+  }
+  els.body = h('div', { class: 'screen' });
+  root.append(h('div', { class: 'toolbar' }, seg), els.body);
+}
+
+function stat(label, value, sub, tone = '') {
+  return h('div', { class: `stat-tile ${tone}` }, h('span', { class: 'small muted', text: label }), h('b', { text: value }), sub ? h('span', { class: 'small muted', text: sub }) : null);
+}
+
+function chartCard(title, sub, chart) {
+  return h('div', { class: 'card', 'aria-label': title }, h('div', { class: 'row spread wrap' }, h('h2', { text: title }), h('span', { class: 'small muted', text: sub })), chart);
+}
+
+async function refresh() {
+  const hist = await call('get_history', { range });
+  const s = hist.summary;
+  const days = [...hist.days].reverse(); // oldest first for charts
+  const food = s.foodDays;
+  const tone = (ok) => (ok ? 'good' : 'warn');
+
+  const insights = h(
+    'div',
+    { class: 'card insights', 'aria-label': 'What’s missing' },
+    h('h2', { text: 'What’s missing' }),
+    h('div', { class: 'list' }, hist.insights.map((i) =>
+      h('div', { class: `item insight ${i.level}` },
+        h('span', { class: `badge ${i.level === 'warn' ? 'warn' : i.level === 'good' ? 'good' : ''}`, text: i.level === 'warn' ? 'Needs attention' : i.level === 'good' ? 'Going well' : 'Note' }),
+        h('span', { class: 'name' }, h('b', { text: i.title }), h('div', { class: 'meta', text: i.detail }))))),
+  );
+
+  const tiles = h(
+    'div',
+    { class: 'stat-grid' },
+    stat('Avg calories', n0(s.avgKcal), `target ${n0(hist.kcalTarget)}`, tone(s.avgKcal <= hist.kcalTarget)),
+    stat('Avg protein', `${n1(s.avgProt)} g`, `${s.protDays}/${food} days ≥ ${n0(hist.protFloor)} g`, tone(s.avgProt >= hist.protFloor)),
+    stat('Avg fiber', s.avgFiber === null ? '—' : `${n1(s.avgFiber)} g`, `${s.fiberDays}/${food} days ≥ ${n0(hist.fiberFloor)} g`, s.avgFiber === null ? '' : tone(s.avgFiber >= hist.fiberFloor)),
+    stat('Medicines', s.adherence === null ? '—' : `${n0(s.adherence)}%`, 'of doses taken', s.adherence === null ? '' : tone(s.adherence >= 90)),
+    stat('Trained', `${s.daysTrained} days`, `of ${hist.days.length}`),
+    stat('Days logged', String(s.daysUsed), `of ${hist.days.length}`),
+  );
+
+  const kcal = barChart({
+    title: 'Calories per day',
+    data: days.map((d) => ({ label: short(d.date), v: d.kcal, tone: d.kcal === 0 ? 'muted' : d.over ? 'over' : '', tip: `${dayLabel(d.date, state.today)}: ${n0(d.kcal)} kcal of ${n0(d.target)}` })),
+    ref: hist.kcalTarget,
+    refLabel: `${n0(hist.kcalTarget)} kcal target`,
+  });
+  const prot = barChart({
+    title: 'Protein per day',
+    data: days.map((d) => ({ label: short(d.date), v: d.prot, tone: d.prot === 0 ? 'muted' : d.protMet ? 'prot' : 'prot short', tip: `${dayLabel(d.date, state.today)}: ${n1(d.prot)} g protein` })),
+    ref: hist.protFloor,
+    refLabel: `${n0(hist.protFloor)} g floor`,
+  });
+  const fiber = barChart({
+    title: 'Fiber per day',
+    data: days.map((d) => ({ label: short(d.date), v: d.fiber || 0, tone: d.fiber === null ? 'muted' : d.fiberMet ? 'fiber' : 'fiber short', tip: d.fiber === null ? `${dayLabel(d.date, state.today)}: no fiber data` : `${dayLabel(d.date, state.today)}: ${n1(d.fiber)} g fiber` })),
+    ref: hist.fiberFloor,
+    refLabel: `${n0(hist.fiberFloor)} g floor`,
+  });
+  const train = barChart({
+    title: 'Training minutes per day',
+    height: 110,
+    data: days.map((d) => ({ label: short(d.date), v: d.mins, tone: 'train', tip: `${dayLabel(d.date, state.today)}: ${d.mins ? `${n0(d.mins)} min` : 'no training'}` })),
+  });
+
+  const micros = s.micros.some((m) => m.pct !== null)
+    ? pctBars(s.micros.map((m) => ({ label: m.label, value: m.pct || 0, text: `${n0(m.pct)}% · ${n1(m.amount)} ${m.unit}`, tone: m.pct < 60 ? 'short' : m.pct < 100 ? 'mid' : 'ok' })), { title: 'Vitamins and minerals' })
+    : h('p', { class: 'muted small', text: 'No vitamin data yet. Foods logged from now on carry it.' });
+
+  const meds = hist.meds.length
+    ? pctBars(hist.meds.map((m) => ({ label: m.name, value: m.due ? (m.taken / m.due) * 100 : 0, text: `${m.taken}/${m.due}`, tone: m.missed === 0 ? 'ok' : m.missed * 5 > m.due ? 'short' : 'mid' })), { max: 100, title: 'Medicines taken' })
+    : h('p', { class: 'muted small', text: 'No medicines due in this period.' });
+
+  const dayList = h('details', { class: 'card' },
+    h('summary', {}, h('b', { text: 'Day by day' }), h('span', { class: 'small muted', text: ' · tap a day to open it in Log' })),
+    h('div', { class: 'list' }, hist.days.map((d) =>
+      h('button', {
+        type: 'button', class: 'item ghost day-row', style: 'text-align:left;border-radius:0;min-height:40px', 'data-hist': d.date,
+        'aria-label': `Open ${dayLabel(d.date, state.today)} in Log`,
+        onclick: () => { state.date = d.date; go('today'); },
+      },
+      h('span', { class: 'name' }, h('b', { text: dayLabel(d.date, state.today) }), h('div', { class: 'meta', text: [d.mins ? `${n0(d.mins)} min trained` : null, d.due ? `meds ${d.taken}/${d.due}` : null].filter(Boolean).join(' · ') })),
+      h('span', { class: `num small ${d.over ? 'error' : ''}`, text: `${n0(d.kcal)} kcal` }),
+      h('span', { class: `num small ${d.protMet ? 'ok' : 'muted'}`, text: `${n1(d.prot)} g` }),
+      h('span', { class: `num small ${d.fiberMet ? 'ok' : 'muted'}`, text: d.fiber === null ? '—' : `${n1(d.fiber)} g fiber` })))));
+
+  fill(
+    els.body,
+    tiles,
+    h('div', { class: 'cols' },
+      h('div', { class: 'col' }, insights, h('div', { class: 'card', 'aria-label': 'Vitamins and minerals' }, h('div', { class: 'row spread wrap' }, h('h2', { text: 'Vitamins and minerals' }), h('span', { class: 'small muted', text: 'daily average vs reference · food only' })), micros), h('div', { class: 'card', 'aria-label': 'Medicines taken' }, h('h2', { text: 'Medicines taken' }), meds)),
+      h('div', { class: 'col' },
+        chartCard('Calories', 'red = over target', kcal),
+        chartCard('Protein', `line = ${n0(hist.protFloor)} g floor`, prot),
+        chartCard('Fiber', `line = ${n0(hist.fiberFloor)} g floor`, fiber),
+        chartCard('Training', 'minutes per day', train))),
+    dayList,
+  );
+}
+
+export default { id: 'history', title: 'History', icon: 'chart', mount, refresh };

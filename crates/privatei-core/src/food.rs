@@ -1,6 +1,6 @@
 //! The food table, food matching, amount parsing and the local estimate.
 
-use crate::model::{meal_for_time, Food};
+use crate::model::{meal_for_time, Food, Micros};
 use serde::{Deserialize, Serialize};
 
 /// (name, kcal per 100 g, protein per 100 g)
@@ -35,6 +35,57 @@ pub const TABLE: &[(&str, f64, f64)] = &[
     ("oil", 884.0, 0.0),
     ("ghee", 900.0, 0.0),
 ];
+
+/// Fiber and micronutrients per 100 g, as eaten: (name, fiber g, vitamin C mg, vitamin D µg,
+/// B12 µg, iron mg, calcium mg). Approximate values from standard food tables (USDA/Swiss);
+/// tofu calcium depends on the coagulant.
+pub const EXTRA: &[(&str, f64, [f64; 5])] = &[
+    ("chicken thigh roasted skin-off", 0.0, [0.0, 0.1, 0.4, 1.0, 10.0]),
+    ("chicken breast", 0.0, [0.0, 0.1, 0.3, 0.5, 15.0]),
+    ("cooked prawns", 0.0, [0.0, 0.0, 1.5, 0.3, 70.0]),
+    ("egg", 0.0, [0.0, 2.0, 0.9, 1.8, 56.0]),
+    ("cottage cheese", 0.0, [0.0, 0.0, 0.4, 0.1, 83.0]),
+    ("skyr", 0.0, [0.0, 0.0, 0.5, 0.1, 120.0]),
+    ("smoked tofu", 1.5, [0.0, 0.0, 0.0, 2.5, 200.0]),
+    ("firm tofu roasted dry", 2.5, [0.0, 0.0, 0.0, 3.0, 250.0]),
+    ("soy granulate dry", 17.0, [0.0, 0.0, 0.0, 9.0, 250.0]),
+    ("chickpeas drained", 7.6, [1.3, 0.0, 0.0, 1.5, 40.0]),
+    ("kidney/white beans drained", 6.4, [1.0, 0.0, 0.0, 2.0, 45.0]),
+    ("tinned tomatoes", 1.5, [12.0, 0.0, 0.0, 1.0, 30.0]),
+    ("oats", 10.1, [0.0, 0.0, 0.0, 4.3, 54.0]),
+    ("ground flaxseed", 27.3, [0.6, 0.0, 0.0, 5.7, 255.0]),
+    ("rice cooked", 0.4, [0.0, 0.0, 0.0, 0.2, 10.0]),
+    ("roti", 4.5, [0.0, 0.0, 0.0, 2.5, 30.0]),
+    ("wholegrain bread", 6.0, [0.0, 0.0, 0.0, 2.5, 100.0]),
+    ("Erdnussmus", 6.0, [0.0, 0.0, 0.0, 1.9, 45.0]),
+    ("banana", 2.6, [8.7, 0.0, 0.0, 0.3, 5.0]),
+    ("apple", 2.4, [4.6, 0.0, 0.0, 0.1, 6.0]),
+    ("grapes", 0.9, [3.2, 0.0, 0.0, 0.4, 10.0]),
+    ("cucumber", 0.5, [2.8, 0.0, 0.0, 0.3, 16.0]),
+    ("frozen raspberries", 6.5, [26.0, 0.0, 0.0, 0.7, 25.0]),
+    ("frozen spinach", 3.0, [2.2, 0.0, 0.0, 1.9, 150.0]),
+    ("potato roasted dry", 2.2, [10.0, 0.0, 0.0, 1.0, 12.0]),
+    ("bell pepper roasted dry", 2.0, [100.0, 0.0, 0.0, 0.5, 9.0]),
+    ("onion roasted dry", 2.4, [6.0, 0.0, 0.0, 0.3, 25.0]),
+    ("oil", 0.0, [0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("ghee", 0.0, [0.0, 0.0, 0.0, 0.0, 0.0]),
+];
+
+fn extra_for(name: &str) -> (Option<f64>, Option<Micros>) {
+    match EXTRA.iter().find(|(n, _, _)| *n == name) {
+        Some((_, f, m)) => (Some(*f), Some(Micros { vit_c: m[0], vit_d: m[1], b12: m[2], iron: m[3], calcium: m[4] })),
+        None => (None, None),
+    }
+}
+
+/// Foods richest in a nutrient per 100 g (for "what's missing" tips). `which`: "fiber" or a micro key.
+pub fn richest(which: &str, n: usize) -> Vec<String> {
+    let idx = crate::model::MICRO_NAMES.iter().position(|(k, _, _)| *k == which);
+    let mut v: Vec<(&str, f64)> =
+        EXTRA.iter().map(|(name, f, m)| (*name, idx.map(|i| m[i]).unwrap_or(*f))).filter(|(_, x)| *x > 0.0).collect();
+    v.sort_by(|a, b| b.1.total_cmp(&a.1));
+    v.into_iter().take(n).map(|(name, _)| capitalize(name)).collect()
+}
 
 /// Piece weights in grams.
 pub const PIECES: &[(&str, f64)] = &[
@@ -75,7 +126,14 @@ const MODIFIERS: &[&str] = &["roasted", "dry", "drained", "cooked", "skin-off", 
 
 /// The table as text for AI prompts: `name kcal/prot; …`.
 pub fn table_text() -> String {
-    TABLE.iter().map(|(n, k, p)| format!("{n} {k}/{p}")).collect::<Vec<_>>().join("; ")
+    TABLE
+        .iter()
+        .map(|(n, k, p)| match extra_for(n).0 {
+            Some(f) => format!("{n} {k}/{p}/{f}"),
+            None => format!("{n} {k}/{p}"),
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 pub fn piece_weight(table_name: &str) -> f64 {
@@ -123,15 +181,14 @@ pub struct FoodRef {
     pub prot100: f64,
     pub piece: f64,
     pub learned: bool,
+    pub fiber100: Option<f64>,
+    pub micros100: Option<Micros>,
 }
 
 fn table_ref(name: &str) -> Option<FoodRef> {
-    TABLE.iter().find(|(n, _, _)| *n == name).map(|(n, k, p)| FoodRef {
-        name: n.to_string(),
-        kcal100: *k,
-        prot100: *p,
-        piece: piece_weight(n),
-        learned: false,
+    TABLE.iter().find(|(n, _, _)| *n == name).map(|(n, k, p)| {
+        let (fiber100, micros100) = extra_for(n);
+        FoodRef { name: n.to_string(), kcal100: *k, prot100: *p, piece: piece_weight(n), learned: false, fiber100, micros100 }
     })
 }
 
@@ -174,7 +231,15 @@ pub fn match_food(user: &[String], learned: &[Food]) -> Option<FoodRef> {
         }
     }
     if let Some((_, f)) = best {
-        return Some(FoodRef { name: f.name.clone(), kcal100: f.kcal100, prot100: f.prot100, piece: f.piece, learned: true });
+        return Some(FoodRef {
+            name: f.name.clone(),
+            kcal100: f.kcal100,
+            prot100: f.prot100,
+            piece: f.piece,
+            learned: true,
+            fiber100: f.fiber100,
+            micros100: f.micros100,
+        });
     }
     match_table(user)
 }
@@ -273,6 +338,10 @@ pub struct Item {
     pub prot: f64,
     pub est: bool,
     pub meal: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fiber: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub micros: Option<Micros>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -306,6 +375,11 @@ pub fn capitalize(s: &str) -> String {
 /// kcal and protein for `grams` of a food.
 pub fn nutrients(f: &FoodRef, grams: f64) -> (f64, f64) {
     ((f.kcal100 * grams / 100.0).round(), round1(f.prot100 * grams / 100.0))
+}
+
+/// Fiber and micronutrients for `grams` of a food, when known.
+pub fn extras(f: &FoodRef, grams: f64) -> (Option<f64>, Option<Micros>) {
+    (f.fiber100.map(|x| round1(x * grams / 100.0)), f.micros100.map(|m| m.scale(grams / 100.0).rounded()))
 }
 
 /// Place one phrase, if possible: (food, grams, estimated?).
@@ -353,6 +427,7 @@ pub fn local_estimate(text: &str, hhmm: &str, learned: &[Food]) -> LocalEstimate
         match place(&part, learned) {
             Some((f, grams, est)) => {
                 let (kcal, prot) = nutrients(&f, grams);
+                let (fiber, micros) = extras(&f, grams);
                 items.push(Item {
                     name: format!("{} · {} g", capitalize(&f.name), fmt_num(grams)),
                     grams: Some(grams),
@@ -360,6 +435,8 @@ pub fn local_estimate(text: &str, hhmm: &str, learned: &[Food]) -> LocalEstimate
                     prot,
                     est,
                     meal: meal.clone(),
+                    fiber,
+                    micros,
                 });
             }
             None => unknown.push(part),
@@ -402,6 +479,8 @@ pub fn learn_from(item: &Item, src: &str, ts: i64) -> Option<Food> {
         kcal100: round1(item.kcal * 100.0 / g),
         prot100: round1(item.prot * 100.0 / g),
         piece: if item.est { g } else { 0.0 },
+        fiber100: item.fiber.map(|x| round1(x * 100.0 / g)),
+        micros100: item.micros.map(|m| m.scale(100.0 / g).rounded()),
         src: src.to_string(),
         ts,
     })
@@ -522,16 +601,58 @@ mod tests {
 
     #[test]
     fn learning() {
-        let item =
-            Item { name: "Protein pudding · 200 g".into(), grams: Some(200.0), kcal: 160.0, prot: 20.0, est: true, meal: "Snack".into() };
+        let item = Item {
+            name: "Protein pudding · 200 g".into(),
+            grams: Some(200.0),
+            kcal: 160.0,
+            prot: 20.0,
+            est: true,
+            meal: "Snack".into(),
+            fiber: None,
+            micros: None,
+        };
         let f = learn_from(&item, "claude", 1).unwrap();
         assert_eq!((f.name.as_str(), f.kcal100, f.prot100, f.piece), ("Protein pudding", 80.0, 10.0, 200.0));
-        let item = Item { name: "Pudding".into(), grams: Some(100.0), kcal: 80.0, prot: 3.0, est: false, meal: "Snack".into() };
+        let item = Item {
+            name: "Pudding".into(),
+            grams: Some(100.0),
+            kcal: 80.0,
+            prot: 3.0,
+            est: false,
+            meal: "Snack".into(),
+            fiber: None,
+            micros: None,
+        };
         assert_eq!(learn_from(&item, "gemini", 1).unwrap().piece, 0.0);
-        let covered = Item { name: "Chicken breast".into(), grams: Some(100.0), kcal: 165.0, prot: 31.0, est: false, meal: "Lunch".into() };
+        let covered = Item {
+            name: "Chicken breast".into(),
+            grams: Some(100.0),
+            kcal: 165.0,
+            prot: 31.0,
+            est: false,
+            meal: "Lunch".into(),
+            fiber: None,
+            micros: None,
+        };
         assert!(learn_from(&covered, "claude", 1).is_none());
         let no_grams = Item { grams: None, ..item };
         assert!(learn_from(&no_grams, "claude", 1).is_none());
+    }
+
+    #[test]
+    fn fiber_and_micros() {
+        assert_eq!(EXTRA.len(), TABLE.len(), "every table food has fiber and micros");
+        for (n, _, _) in TABLE {
+            assert!(EXTRA.iter().any(|(e, _, _)| e == n), "{n} missing from EXTRA");
+        }
+        let e = local_estimate("50g oats, 1 banana", "08:00", &[]);
+        assert_eq!(e.items[0].fiber, Some(5.1));
+        assert_eq!(e.items[1].fiber, Some(3.1));
+        let m = e.items[1].micros.unwrap();
+        assert_eq!(m.vit_c, 10.4);
+        assert_eq!(richest("fiber", 2), vec!["Ground flaxseed", "Soy granulate dry"]);
+        assert_eq!(richest("vitC", 1), vec!["Bell pepper roasted dry"]);
+        assert!(table_text().contains("oats 370/13/10.1"));
     }
 
     #[test]

@@ -232,8 +232,28 @@ fn repeat_last_week(s: State<AppState>) -> R<usize> {
 }
 
 #[tauri::command]
-fn get_history(s: State<AppState>) -> R<History> {
-    with(&s, |c| Ok(c.history()))
+fn get_history(s: State<AppState>, range: Option<usize>) -> R<History> {
+    with(&s, |c| Ok(c.history_range(range.unwrap_or(60))))
+}
+
+#[tauri::command]
+fn get_plan_ahead(s: State<AppState>, days: usize) -> R<PlanAhead> {
+    with(&s, |c| Ok(c.plan_ahead(days)))
+}
+
+#[tauri::command]
+fn add_plan_meal(s: State<AppState>, date: String, meal: PlanMeal) -> R<()> {
+    with(&s, |c| c.add_plan_meal(&date, meal))
+}
+
+#[tauri::command]
+fn remove_plan_meal(s: State<AppState>, date: String, idx: usize) -> R<()> {
+    with(&s, |c| c.remove_plan_meal(&date, idx))
+}
+
+#[tauri::command]
+fn training_summary(s: State<AppState>) -> R<TrainingSummary> {
+    with(&s, |c| Ok(c.training_summary()))
 }
 
 // ---------- Settings ----------
@@ -380,6 +400,10 @@ fn main() {
             get_week,
             repeat_last_week,
             get_history,
+            get_plan_ahead,
+            add_plan_meal,
+            remove_plan_meal,
+            training_summary,
             get_settings,
             save_settings,
             get_ai_settings,
