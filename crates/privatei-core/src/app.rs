@@ -1139,30 +1139,42 @@ impl Core {
         Ok(n)
     }
 
-    /// The last 8 distinct food names logged, newest first.
+    /// Your usual foods: up to 8, ranked by how often and how recently you logged them.
+    /// Each entry adds a score that halves every 14 days; amounts of the same food count
+    /// together, and the chip repeats the most recent entry.
     pub fn recent_foods(&self) -> Vec<RecentFood> {
-        let mut logs: Vec<&Log> = self.store.all::<Log>().map(|(_, l)| l).collect();
-        logs.sort_by_key(|l| std::cmp::Reverse(l.ts));
-        let mut seen = HashSet::new();
-        let mut out = vec![];
-        for l in logs {
-            if seen.insert(l.name.to_lowercase()) {
-                out.push(RecentFood {
-                    name: l.name.clone(),
-                    grams: l.grams,
-                    kcal: l.kcal,
-                    prot: l.prot,
-                    est: l.est,
-                    fiber: l.fiber,
-                    nut: l.nut.clone(),
-                    food_ref: l.food_ref.clone(),
-                });
-                if out.len() == 8 {
-                    break;
-                }
+        let today = self.today();
+        let base = |name: &str| food::base_name(name).to_lowercase();
+        let mut score: HashMap<String, f64> = HashMap::new();
+        let mut latest: HashMap<String, &Log> = HashMap::new();
+        for (_, l) in self.store.all::<Log>() {
+            let age = dates::days_between(&l.date, &today).max(0) as f64;
+            if age > 90.0 {
+                continue;
+            }
+            let k = base(&l.name);
+            *score.entry(k.clone()).or_default() += 0.5f64.powf(age / 14.0);
+            let e = latest.entry(k).or_insert(l);
+            if l.ts > e.ts {
+                *e = l;
             }
         }
-        out
+        let mut ranked: Vec<(f64, &Log)> = latest.into_iter().map(|(k, l)| (score[&k], l)).collect();
+        ranked.sort_by(|a, b| b.0.total_cmp(&a.0).then(b.1.ts.cmp(&a.1.ts)));
+        ranked
+            .into_iter()
+            .take(8)
+            .map(|(_, l)| RecentFood {
+                name: l.name.clone(),
+                grams: l.grams,
+                kcal: l.kcal,
+                prot: l.prot,
+                est: l.est,
+                fiber: l.fiber,
+                nut: l.nut.clone(),
+                food_ref: l.food_ref.clone(),
+            })
+            .collect()
     }
 
     // ---------- Add: estimates ----------

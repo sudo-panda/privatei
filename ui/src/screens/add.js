@@ -18,7 +18,7 @@ function mount(root, o = {}) {
   els.onLogged = o.onLogged || (() => {});
   els.target = h('div', { class: 'small muted', 'data-testid': 'log-target' });
   els.recent = h('div', { class: 'chips', 'aria-label': 'Recent foods' });
-  const recentCard = h('div', { class: 'card' }, h('div', { class: 'row spread' }, h('h3', { text: 'Recent' }), els.target), els.recent);
+  const recentCard = h('div', { class: 'card' }, h('div', { class: 'row spread' }, h('h3', { text: 'Your usual foods' }), els.target), els.recent);
 
   // Describe it
   const text = h('textarea', { id: 'describe', 'aria-label': 'Describe what you ate', placeholder: 'e.g. 200g chicken breast, 2 eggs and 1 banana', maxlength: 2000 });
@@ -97,6 +97,7 @@ function mount(root, o = {}) {
       h('div', { class: 'card add-inline', 'aria-label': 'Add food' },
         h('div', { class: 'row spread' }, h('h2', { text: 'Add food' }), els.target),
         search,
+        h('div', { class: 'small muted', text: 'Your usual foods — tap to log again:' }),
         els.recent,
         h('div', { class: 'small muted', text: 'Or describe it — known foods are worked out on your Mac, the rest by AI:' }),
         text, h('div', { class: 'grid2' }, work, photoBtn), photoInput, els.status,

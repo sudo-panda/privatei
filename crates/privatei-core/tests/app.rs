@@ -107,16 +107,26 @@ fn copy_yesterday() {
 }
 
 #[test]
-fn recent_foods_last_8_distinct_newest_first() {
+fn usual_foods_rank_by_frequency_and_recency() {
     let mut c = core("2026-11-22", "12:00");
-    for i in 0..12 {
-        log(&mut c, "2026-11-22", &format!("Food {}", i % 10), 100.0, 1.0);
+    // Skyr every day for three weeks, at two different amounts.
+    for i in 0..21 {
+        let d = privatei_core::dates::add_days("2026-11-22", -i);
+        log(&mut c, &d, if i % 2 == 0 { "Skyr · 200 g" } else { "Skyr · 150 g" }, 126.0, 22.0);
     }
-    let r = c.recent_foods();
-    assert_eq!(r.len(), 8);
-    assert_eq!(r[0].name, "Food 1");
-    assert_eq!(r[1].name, "Food 0");
-    assert_eq!(r[2].name, "Food 9");
+    // Oats twice, long ago; a curry once, today.
+    log(&mut c, "2026-10-01", "Oats · 50 g", 185.0, 6.5);
+    log(&mut c, "2026-10-02", "Oats · 50 g", 185.0, 6.5);
+    log(&mut c, "2026-11-22", "Curry", 600.0, 25.0);
+    for i in 0..10 {
+        log(&mut c, "2026-08-01", &format!("Old food {i}"), 100.0, 1.0); // older than 90 days: ignored
+    }
+    let r: Vec<String> = c.recent_foods().into_iter().map(|f| f.name).collect();
+    assert_eq!(r[0], "Skyr · 200 g", "most frequent first, as its latest amount: {r:?}");
+    assert_eq!(r.iter().filter(|n| n.starts_with("Skyr")).count(), 1, "one chip per food");
+    assert_eq!(r[1], "Curry", "something new today still shows up");
+    assert_eq!(r[2], "Oats · 50 g");
+    assert!(!r.iter().any(|n| n.starts_with("Old food")));
 }
 
 fn med(name: &str, time: &str) -> MedInput {

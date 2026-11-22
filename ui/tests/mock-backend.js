@@ -531,15 +531,18 @@ const handlers = {
     for (const [, l] of rows) db.log[id()] = { ...l, date, ts: db.ts++ };
     return rows.length;
   },
+  // Same as the core: frequency × recency (halves every 14 days), one chip per food, latest amount.
   recent_foods: () => {
-    const seen = new Set(), out = [];
-    for (const [, l] of live('log').sort((a, b) => b[1].ts - a[1].ts)) {
-      if (seen.has(l.name.toLowerCase())) continue;
-      seen.add(l.name.toLowerCase());
-      out.push({ name: l.name, grams: l.grams, kcal: l.kcal, prot: l.prot, est: l.est, fiber: l.fiber, nut: l.nut, foodRef: l.foodRef });
-      if (out.length === 8) break;
+    const score = {}, latest = {};
+    for (const [, l] of live('log')) {
+      const age = Math.max(0, Math.round((new Date(TODAY) - new Date(l.date)) / 864e5));
+      if (age > 90) continue;
+      const k = l.name.split(' · ')[0].toLowerCase();
+      score[k] = (score[k] || 0) + Math.pow(0.5, age / 14);
+      if (!latest[k] || l.ts > latest[k].ts) latest[k] = l;
     }
-    return out;
+    return Object.keys(latest).sort((a, b) => score[b] - score[a] || latest[b].ts - latest[a].ts).slice(0, 8)
+      .map((k) => { const l = latest[k]; return { name: l.name, grams: l.grams, kcal: l.kcal, prot: l.prot, est: l.est, fiber: l.fiber, nut: l.nut, foodRef: l.foodRef }; });
   },
   estimate_food: estimate,
   estimate_photo: () => {
