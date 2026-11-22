@@ -239,7 +239,8 @@ pub fn cofid_from_xlsx(bytes: &[u8]) -> Result<Vec<NewFood>> {
         let rows: Vec<Vec<String>> = range.rows().map(|r| r.iter().map(text).collect()).collect();
         let Some(hi) = rows.iter().position(|r| r.get(1).map(|c| c.trim()) == Some("Food Name")) else { continue };
         let head = &rows[hi];
-        let idx: Vec<(usize, &str)> = cols.iter().filter_map(|(_, name, key)| head.iter().position(|h| h.trim() == *name).map(|i| (i, *key))).collect();
+        let idx: Vec<(usize, &str)> =
+            cols.iter().filter_map(|(_, name, key)| head.iter().position(|h| h.trim() == *name).map(|i| (i, *key))).collect();
         let c_group = head.iter().position(|h| h.trim() == "Group");
         for r in &rows[hi + 1..] {
             let code = r.first().map(|c| c.trim()).unwrap_or("");
