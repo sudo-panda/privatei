@@ -1,0 +1,38 @@
+{
+  "format": "larder-export",
+  "version": 1,
+  "exported": "2026-11-20T18:00:00.000Z",
+  "collections": {
+    "log": {
+      "l1": { "date": "2026-11-19", "meal": "Breakfast", "name": "Skyr · 200 g", "grams": 200, "kcal": 126, "prot": 22, "est": false, "ts": 1763535600000 },
+      "l2": { "date": "2026-11-19", "meal": "Lunch", "name": "Chicken breast · 150 g", "grams": 150, "kcal": 248, "prot": 46.5, "est": false, "ts": 1763550000000 },
+      "l3": { "date": "2026-11-20", "meal": "Dinner", "name": "Made-up stew", "grams": null, "kcal": "540", "prot": "31", "est": true, "ts": 1763661600000 }
+    },
+    "plan": {
+      "2026-11-21": { "meals": [ { "slot": "Lunch", "name": "Tofu bowl", "kcal": 520, "prot": 38, "done": false } ] }
+    },
+    "stock": {
+      "s1": { "name": "Cooked rice", "qty": 600, "unit": "g", "cat": "cooked", "added": "2026-11-18", "useBy": "2026-11-22" },
+      "s2": { "name": "Oats", "qty": 1, "unit": "kg", "cat": "shelf", "added": "2026-11-01" }
+    },
+    "list": {
+      "i1": { "name": "Skyr", "qty": "4 pots", "cat": "chilled", "price": 6.4, "trip": 1, "checked": false, "inStock": false }
+    },
+    "meds": {
+      "m1": { "groupId": "g1", "name": "Vitamin D", "dose": "1000 IU", "freq": "daily", "days": [], "time": "08:00", "from": "2026-11-01", "active": true }
+    },
+    "medlog": {
+      "2026-11-19_m1": { "date": "2026-11-19", "medId": "m1", "at": "08:05", "ts": 1763535900000 }
+    },
+    "workouts": {
+      "w1": { "date": "2026-11-19", "kind": "run", "mins": 30, "kcal": 422, "name": "Lake run", "src": "manual", "ts": 1763560000000 }
+    },
+    "foods": {
+      "f1": { "name": "Protein pudding", "kcal100": 80, "prot100": 10, "piece": 200, "src": "claude", "ts": 1763500000000 }
+    },
+    "rules": { "house": { "text": "No cheese after 20:00" } },
+    "settings": { "main": { "addBurn": false, "weightKg": 82, "kcalTarget": 1500, "protFloor": 90 } },
+    "_local": { "ai": { "geminiKey": "SHOULD-NOT-IMPORT" } },
+    "somethingNew": { "x": { "y": 1 } }
+  }
+}

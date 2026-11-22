@@ -1,0 +1,12 @@
+target/
+node_modules/
+ui/dist/
+ui/dist-mock/
+ui/test-results/
+ui/playwright-report/
+.DS_Store
+# Personal data never goes in git
+*larder*.json
+*privatei*.json
+!tests/fixtures/*.json
+apps/desktop/gen/
