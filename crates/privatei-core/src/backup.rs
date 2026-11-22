@@ -1,4 +1,4 @@
-//! Import/export in the `larder-export` / `privatei-export` format:
+//! Import/export in the `privatei-export` format (an older format name is also accepted):
 //! `{"format":…,"version":1,"exported":"…","collections":{"<table>":{"<id>":{fields…}}}}`
 
 use crate::model::*;
@@ -68,7 +68,7 @@ pub fn import(store: &mut Store, text: &str) -> Result<usize, String> {
     let v: Value = serde_json::from_str(text).map_err(|_| "That file isn't a PrivateI backup (not valid JSON).".to_string())?;
     let format = v.get("format").and_then(Value::as_str).unwrap_or("");
     if format != FORMAT && format != LEGACY_FORMAT {
-        return Err("That file isn't a PrivateI or Larder backup.".into());
+        return Err("That file isn't a PrivateI backup.".into());
     }
     match v.get("version").and_then(Value::as_i64) {
         Some(1) => {}

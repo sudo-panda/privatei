@@ -47,17 +47,16 @@ this project's key.
 The window is laid out for the desktop (sidebar, two columns). Below 760 px wide it
 switches to the compact phone layout, which the Android app will reuse.
 
-## Bring your data over from Larder
+## Import data
 
-Settings → **Restore / import…** → pick your `larder-data.json`. Both the old
-`larder-export` format and the new `privatei-export` format are read. The import says how
-many records it brought in. Importing again updates the same records rather than duplicating them.
+Settings → **Restore / import…** → pick a PrivateI backup (`.json`). The import says how many
+records it brought in. Importing again updates the same records rather than duplicating them.
 
 ## Backup
 
 Settings → **Back up…** saves a `privatei-backup-YYYY-MM-DD.json`. It holds all your data
 but never your AI keys. Keep backups out of git (the `.gitignore` already blocks
-`*larder*.json` and `*privatei*.json`).
+backup and data `.json` files).
 
 The live database is `~/Library/Application Support/app.privatei.desktop/privatei.sqlite`.
 

@@ -266,7 +266,7 @@ function renderBackup() {
     section(
       'Backup',
       row('Save a backup', 'All your data except AI keys.', backup),
-      row('Restore or import', 'A PrivateI backup or your old Larder file.', restore),
+      row('Restore or import', 'A PrivateI backup file.', restore),
     ),
   );
 }

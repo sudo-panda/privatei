@@ -435,7 +435,7 @@ const handlers = {
   'plugin:dialog|save': () => '/tmp/privatei-backup.json',
   'plugin:app|version': () => '0.4.0',
   'plugin:updater|check': () => null,
-  'plugin:dialog|open': () => '/tmp/larder-data.json',
+  'plugin:dialog|open': () => '/tmp/privatei-backup.json',
 };
 
 export function install() {
