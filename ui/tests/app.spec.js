@@ -690,7 +690,7 @@ test('Floating Add button sits above the phone tabs', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Add food', exact: true })).toBeHidden();
 });
 
-test('Settings targets: each box sits on the same line as its name', async ({ page }) => {
+test('Settings targets: each box sits on the same line as its name, hint underneath', async ({ page }) => {
   for (const w of [1280, 360]) {
     await page.setViewportSize({ width: w, height: 800 });
     await open(page, 'seed=demo&layout=new');
@@ -701,7 +701,8 @@ test('Settings targets: each box sits on the same line as its name', async ({ pa
       const n = await r.locator('.set-name').boundingBox();
       const i = await r.locator('input').boundingBox();
       expect(Math.abs(n.y + n.height / 2 - (i.y + i.height / 2)), `same line at ${w}px`).toBeLessThan(3);
-      expect((await r.boundingBox()).height).toBeLessThan(56);
+      expect((await r.locator('.target-hint').boundingBox()).y, 'hint underneath').toBeGreaterThan(i.y + i.height / 2);
+      expect((await r.boundingBox()).height).toBeLessThan(72);
     }
   }
 });
