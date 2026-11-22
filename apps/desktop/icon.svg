@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <!-- Tokyo Night: thin-line eye; the iris is the energy (blue) and protein (green) rings -->
-  <rect x="6.25" y="6.25" width="87.5" height="87.5" rx="19.5" fill="#1A1B26"/>
-  <path d="M16 50 Q50 16 84 50 Q50 84 16 50 Z" fill="none" stroke="#C0CAF5" stroke-width="2.6" stroke-linejoin="round"/>
-  <circle cx="50" cy="50" r="14" fill="none" stroke="#292E42" stroke-width="3.2"/>
-  <circle cx="50" cy="50" r="14" fill="none" stroke="#7AA2F7" stroke-width="3.2" stroke-linecap="round"
-          stroke-dasharray="63.3 88" transform="rotate(-90 50 50)"/>
-  <circle cx="50" cy="50" r="8" fill="none" stroke="#292E42" stroke-width="2.8"/>
-  <circle cx="50" cy="50" r="8" fill="none" stroke="#9ECE6A" stroke-width="2.8" stroke-linecap="round"
-          stroke-dasharray="30 50.3" transform="rotate(-90 50 50)"/>
+  <!-- Tokyo Night: a filled night-blue eye on a storm tile; the iris is the energy (blue) and protein (green) rings -->
+  <rect x="6.25" y="6.25" width="87.5" height="87.5" rx="19.5" fill="#3B4261"/>
+  <path d="M14 50 Q50 6 86 50 Q50 94 14 50 Z" fill="#1A1B26"/>
+  <circle cx="50" cy="50" r="14.5" fill="none" stroke="#2F3549" stroke-width="5"/>
+  <circle cx="50" cy="50" r="14.5" fill="none" stroke="#7AA2F7" stroke-width="5" stroke-linecap="round"
+          stroke-dasharray="65.6 91.1" transform="rotate(-90 50 50)"/>
+  <circle cx="50" cy="50" r="7" fill="none" stroke="#2F3549" stroke-width="4.5"/>
+  <circle cx="50" cy="50" r="7" fill="none" stroke="#9ECE6A" stroke-width="4.5" stroke-linecap="round"
+          stroke-dasharray="26.4 44" transform="rotate(-90 50 50)"/>
 </svg>
