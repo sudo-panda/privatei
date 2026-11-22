@@ -6,7 +6,7 @@ const SOURCE = { table: 'Built-in', mine: 'Learned', recipe: 'Recipe', usda: 'US
 
 /**
  * opts.onPick(food, grams, meal) — called when you confirm an amount.
- * opts.confirmLabel — button text; opts.meal — show meal chips with this default.
+ * opts.confirmLabel — button text; opts.meal — show meal chips with this default (a value, or a function returning one).
  */
 export function foodSearch(opts) {
   const input = h('input', { type: 'search', class: 'food-q', id: opts.id || 'food-search', placeholder: 'Search foods — e.g. lentils, gruyère, chapati', autocomplete: 'off', 'aria-label': 'Search foods' });
@@ -70,7 +70,7 @@ export function foodSearch(opts) {
   function pick(f) {
     results.classList.add('hidden');
     picked.classList.remove('hidden');
-    let meal = opts.meal || null;
+    let meal = (typeof opts.meal === 'function' ? opts.meal() : opts.meal) || null;
     const piece = f.portions.find((p) => p.label === '1 piece');
     const grams = h('input', { type: 'number', id: `${opts.id || 'food-search'}-grams`, min: 1, max: 5000, value: piece ? piece.grams : 100, 'aria-label': 'Grams' });
     const preview = h('div', { class: 'num small', 'data-testid': 'food-preview' });
@@ -88,7 +88,7 @@ export function foodSearch(opts) {
       h('div', { class: 'chips', role: 'group', 'aria-label': 'Portions' }, portions.map((p) =>
         h('button', { type: 'button', class: 'chip', onclick: () => { grams.value = p.grams; show(); } }, h('span', { text: `${p.label}${p.label.endsWith(' g') ? '' : ` (${n0(p.grams)} g)`}` })))),
       h('div', { class: 'row' }, h('label', { class: 'field grow' }, 'Grams', grams), preview),
-      opts.meal ? chipGroup(['Breakfast', 'Lunch', 'Snack', 'Dinner'].map((m) => [m, m]), meal, (v) => (meal = v), 'Meal') : null,
+      meal ? chipGroup(['Breakfast', 'Lunch', 'Snack', 'Dinner'].map((m) => [m, m]), meal, (v) => (meal = v), 'Meal') : null,
       h('div', { class: 'grid2' },
         h('button', { type: 'button', onclick: reset }, 'Cancel'),
         h('button', { type: 'button', class: 'primary', onclick: async () => { const g = Number(grams.value); if (!(g > 0 && g <= 5000)) return grams.focus(); if ((await opts.onPick(f, g, meal)) !== false) reset(); } }, opts.confirmLabel || 'Add')),

@@ -32,11 +32,22 @@ function mount(root, o = {}) {
     // Adding food happens in an overlay, so the Log stays a clean record of the day.
     els.addOverlay = overlay('Add food');
     opts.addPanel.mount(els.addOverlay.body, { compact: true, onLogged: () => els.addOverlay.close() });
+    // Always within reach, however far down the day you've scrolled.
+    root.classList.add('has-fab');
+    root.append(h('button', { type: 'button', class: 'fab', id: 'open-add', 'aria-label': 'Add food', title: 'Add food (⌘N)', onclick: () => openAdd() }, icon('add')));
   }
 }
 
-export function openAdd() {
-  if (els.addOverlay) els.addOverlay.open('#food-search');
+/** Open Add food; with a meal, everything you add goes into that meal. */
+export function openAdd(meal = null) {
+  if (!els.addOverlay) return;
+  opts.addPanel.setMeal(meal);
+  els.addOverlay.open('#food-search');
+}
+
+function addTo(meal) {
+  if (opts.addPanel) openAdd(meal);
+  else go('add');
 }
 
 async function refresh(o = {}) {
@@ -141,17 +152,18 @@ function render() {
   const left = d.target - d.kcal;
   const kPct = Math.min(100, (d.kcal / Math.max(1, d.target)) * 100);
   const pPct = Math.min(100, (d.prot / Math.max(1, d.protFloor || 1)) * 100);
+  // One compact line each: name, amount / goal, what's left, and a thin bar underneath.
+  const macro = (cls, label, testid, value, goal, note, noteCls, pct, barCls, aria) =>
+    h('div', { class: `macro ${cls}` },
+      h('span', { class: 'mlabel', text: label }),
+      h('span', { class: 'mval num' }, h('b', { 'data-testid': testid, text: value }), h('span', { class: 'muted', text: ` / ${goal}` })),
+      h('span', { class: `mnote small ${noteCls}`, text: note }),
+      h('div', { class: `bar thin ${barCls}`, role: 'progressbar', 'aria-label': aria[0], 'aria-valuemin': 0, 'aria-valuemax': aria[1], 'aria-valuenow': aria[2] }, h('span', { style: `width:${pct}%` })));
   fill(
     els.energy,
-    h('div', { class: 'row spread' }, h('h3', { text: 'Energy' }), h('span', { class: `small ${d.over ? 'error' : 'muted'}`, text: d.over ? `${n0(-left)} kcal over` : `${n0(left)} kcal left` })),
-    h('div', { class: 'row' }, h('span', { class: 'big', 'data-testid': 'kcal', text: n0(d.kcal) }), h('span', { class: 'muted num', text: `/ ${n0(d.target)} kcal` })),
-    h('div', { class: `bar ${d.over ? 'over' : ''}`, role: 'progressbar', 'aria-label': 'Energy against target', 'aria-valuemin': 0, 'aria-valuemax': n0(d.target), 'aria-valuenow': n0(d.kcal) }, h('span', { style: `width:${kPct}%` })),
-    h('div', { class: 'row spread' }, h('h3', { text: 'Protein' }), h('span', { class: `small ${d.protMet ? 'ok' : 'muted'}`, text: d.protMet ? 'Floor reached' : `${n1(d.protFloor - d.prot)} g to go` })),
-    h('div', { class: 'row' }, h('span', { class: 'big', 'data-testid': 'prot', text: n1(d.prot) }), h('span', { class: 'muted num', text: `/ ${n0(d.protFloor)} g` })),
-    h('div', { class: `bar prot ${d.protMet ? 'good' : ''}`, role: 'progressbar', 'aria-label': 'Protein against floor', 'aria-valuemin': 0, 'aria-valuemax': n0(d.protFloor), 'aria-valuenow': n1(d.prot) }, h('span', { style: `width:${pPct}%` })),
-    h('div', { class: 'row spread' }, h('h3', { text: 'Fiber' }), h('span', { class: `small ${d.fiberMet ? 'ok' : 'muted'}`, text: !d.fiberKnown ? 'no fiber data yet' : d.fiberMet ? 'Floor reached' : `${n1(d.fiberFloor - d.fiber)} g to go` })),
-    h('div', { class: 'row' }, h('span', { class: 'big', 'data-testid': 'fiber', text: n1(d.fiber) }), h('span', { class: 'muted num', text: `/ ${n0(d.fiberFloor)} g` })),
-    h('div', { class: `bar fiber ${d.fiberMet ? 'good' : ''}`, role: 'progressbar', 'aria-label': 'Fiber against floor', 'aria-valuemin': 0, 'aria-valuemax': n0(d.fiberFloor), 'aria-valuenow': n1(d.fiber) }, h('span', { style: `width:${Math.min(100, (d.fiber / Math.max(1, d.fiberFloor)) * 100)}%` })),
+    macro('energy', 'Energy', 'kcal', n0(d.kcal), `${n0(d.target)} kcal`, d.over ? `${n0(-left)} over` : `${n0(left)} left`, d.over ? 'error' : 'muted', kPct, d.over ? 'over' : '', ['Energy against target', n0(d.target), n0(d.kcal)]),
+    macro('prot', 'Protein', 'prot', n1(d.prot), `${n0(d.protFloor)} g`, d.protMet ? 'floor reached' : `${n1(d.protFloor - d.prot)} g to go`, d.protMet ? 'ok' : 'muted', pPct, `prot ${d.protMet ? 'good' : ''}`, ['Protein against floor', n0(d.protFloor), n1(d.prot)]),
+    macro('fiber', 'Fiber', 'fiber', n1(d.fiber), `${n0(d.fiberFloor)} g`, !d.fiberKnown ? 'no data yet' : d.fiberMet ? 'floor reached' : `${n1(d.fiberFloor - d.fiber)} g to go`, d.fiberMet ? 'ok' : 'muted', Math.min(100, (d.fiber / Math.max(1, d.fiberFloor)) * 100), `fiber ${d.fiberMet ? 'good' : ''}`, ['Fiber against floor', n0(d.fiberFloor), n1(d.fiber)]),
     d.burn > 0
       ? h(
           'label',
@@ -215,7 +227,12 @@ function render() {
     h(
       'div',
       { class: 'food-group', 'data-meal': g.meal },
-      h('div', { class: 'food-row food-head' }, h('span', { class: 'fn', text: g.meal }), cell(n0(g.kcal)), cell(fx(g.prot)), cell('')),
+      h('div', { class: 'food-row food-head' },
+        h('span', { class: 'fn', text: g.meal }),
+        cell(g.rows.length ? n0(g.kcal) : ''),
+        cell(g.rows.length ? fx(g.prot) : ''),
+        h('span', { class: 'fc' }, iconButton('add', `Add to ${g.meal}`, () => addTo(g.meal), 'icon sm ghost meal-add'))),
+      g.rows.length ? null : h('div', { class: 'food-empty small muted', text: 'Nothing yet' }),
       g.rows.map((r) => {
         const [name, amount] = split(r.name);
         return h(
@@ -231,17 +248,13 @@ function render() {
       }),
     ),
   );
-  const head = groups.length
-    ? h('div', { class: 'food-row food-cols', 'aria-hidden': 'true' }, h('span', { class: 'fn' }), cell('kcal'), cell('protein'), cell('fiber'))
-    : null;
+  const head = h('div', { class: 'food-row food-cols', 'aria-hidden': 'true' }, h('span', { class: 'fn' }), cell('kcal'), cell('protein'), cell('fiber'));
   fill(
     els.food,
     h('div', { class: 'card-head' },
       h('h2', { text: 'Food' }),
-      opts.addPanel
-        ? h('button', { type: 'button', class: 'primary', id: 'open-add', onclick: openAdd }, icon('add'), 'Add food')
-        : h('button', { type: 'button', class: 'ghost', onclick: () => go('add') }, icon('add'), 'Add food')),
-    groups.length ? h('div', { class: 'food-table' }, head, groups) : h('p', { class: 'muted', text: 'Nothing logged yet.' }),
+      opts.addPanel ? null : h('button', { type: 'button', class: 'ghost', onclick: () => go('add') }, icon('add'), 'Add food')),
+    h('div', { class: 'food-table' }, head, groups),
     d.canCopyYesterday
       ? h('button', {
           type: 'button',

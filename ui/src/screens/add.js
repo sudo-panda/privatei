@@ -7,7 +7,10 @@ const MEALS = ['Breakfast', 'Lunch', 'Snack', 'Dinner'];
 let els = {};
 let draft = null; // { items, unknown, note, providerText, error }
 
+let mealPreset = null; // set when you open Add food from a meal on the Log
+
 function guessMeal() {
+  if (mealPreset) return mealPreset;
   const d = new Date();
   const m = d.getHours() * 60 + d.getMinutes();
   return m < 630 ? 'Breakfast' : m < 870 ? 'Lunch' : m < 1050 ? 'Snack' : 'Dinner';
@@ -30,7 +33,7 @@ function mount(root, o = {}) {
     els.status.textContent = 'Working it out…';
     try {
       const v = await quiet('estimate_food', { text: text.value });
-      setDraft(v);
+      setDraft(withPreset(v));
       els.status.textContent = '';
     } catch (e) {
       els.status.textContent = '';
@@ -52,7 +55,7 @@ function mount(root, o = {}) {
       const data = await readAsDataUrl(f);
       const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
       const v = await quiet('estimate_photo', { data, ext, note: text.value });
-      setDraft(v);
+      setDraft(withPreset(v));
     } catch (e) {
       toast(message(e), 'error');
     } finally {
@@ -74,7 +77,7 @@ function mount(root, o = {}) {
 
   const search = (els.search = foodSearch({
     id: 'food-search',
-    meal: guessMeal(),
+    meal: guessMeal,
     confirmLabel: 'Add to log',
     onPick: async (f, grams, meal) => {
       try {
@@ -116,6 +119,12 @@ function readAsDataUrl(file) {
     r.onerror = () => rej(new Error('That photo could not be read.'));
     r.readAsDataURL(file);
   });
+}
+
+/** Opened from a meal on the Log: everything you describe goes into that meal. */
+function withPreset(v) {
+  if (mealPreset && v && v.items) for (const it of v.items) it.meal = mealPreset;
+  return v;
 }
 
 function setDraft(v) {
@@ -212,6 +221,7 @@ function manualCard() {
   name.addEventListener('input', autofill);
   grams.addEventListener('input', autofill);
   const chips = chipGroup(MEALS.map((m) => [m, m]), meal, (v) => (meal = v), 'Meal');
+  els.manualMeal = (v) => { meal = v; chips.setValue(v); };
   const save = h('button', {
     type: 'button',
     class: 'primary',
@@ -278,4 +288,10 @@ async function refresh(opts = {}) {
   if (names) fill(els.names, names.map((n) => h('option', { value: n })));
 }
 
-export default { id: 'add', title: 'Add food', short: 'Add', icon: 'add', mount, refresh, go };
+/** Add to this meal (from a meal on the Log), or null to guess from the time of day. */
+function setMeal(m) {
+  mealPreset = MEALS.includes(m) ? m : null;
+  if (els.manualMeal) els.manualMeal(guessMeal());
+}
+
+export default { id: 'add', title: 'Add food', short: 'Add', icon: 'add', mount, refresh, go, setMeal };

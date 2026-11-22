@@ -576,7 +576,7 @@ fn edit_log_plan_and_training() {
     };
     c.update_log(&id, edit("Two eggs", 157.0)).unwrap();
     let d = c.day("2026-11-22").unwrap();
-    assert_eq!((d.kcal, d.meals[0].meal.as_str(), d.meals[0].rows[0].name.as_str()), (157.0, "Dinner", "Two eggs"));
+    assert_eq!((d.kcal, d.meals[3].meal.as_str(), d.meals[3].rows[0].name.as_str()), (157.0, "Dinner", "Two eggs"));
     assert!(c.update_log(&id, edit("", 1.0)).is_err());
     assert!(c.update_log("nope", edit("x", 10.0)).is_err());
 
@@ -654,4 +654,29 @@ fn recipes_from_ingredients() {
     assert_eq!(c2.recipes()[0].name, "Dal");
     c.delete_recipe(&id).unwrap();
     assert!(c.recipes().is_empty());
+}
+
+#[test]
+fn day_always_has_all_four_meals() {
+    let mut c = core("2026-11-22", "12:00");
+    let names = |c: &Core| c.day("2026-11-22").unwrap().meals.iter().map(|g| (g.meal.clone(), g.rows.len())).collect::<Vec<_>>();
+    let empty = names(&c);
+    assert_eq!(empty, vec![("Breakfast".into(), 0), ("Lunch".into(), 0), ("Snack".into(), 0), ("Dinner".into(), 0)]);
+    c.add_log(
+        "2026-11-22",
+        LogInput {
+            meal: "Snack".into(),
+            name: "Apple".into(),
+            grams: None,
+            kcal: 80.0,
+            prot: 0.3,
+            est: false,
+            fiber: None,
+            nut: None,
+            food_ref: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(names(&c)[2], ("Snack".into(), 1));
+    assert_eq!(names(&c).len(), 4);
 }

@@ -260,7 +260,7 @@ function getDay({ date }) {
     burn: b, addBurn: s.addBurn, over: kcal > target, protMet: prot >= s.protFloor,
     fiber: r1(fiber), fiberFloor: s.fiberFloor, fiberKnown, fiberMet: fiberKnown && fiber >= s.fiberFloor, nutrients: nutViews(msum, known, logs.length, s.fiberFloor),
     plan: (db.plan[date]?.meals || []).map((m, idx) => ({ idx, slot: m.slot, name: m.name, kcal: m.kcal, prot: m.prot, done: !!m.done })),
-    meals: MEALS.filter((m) => groups[m]).map((m) => ({ ...groups[m], kcal: Math.round(groups[m].kcal), prot: r1(groups[m].prot) })),
+    meals: MEALS.map((m) => groups[m] || { meal: m, kcal: 0, prot: 0, rows: [] }).map((g) => ({ ...g, kcal: Math.round(g.kcal), prot: r1(g.prot) })),
     meds, workouts: ws.map(([wid, w]) => ({ id: wid, kind: w.kind, mins: w.mins, kcal: w.kcal, name: w.name })),
     canCopyYesterday: own === 0 && live('log').some(([lid, l]) => l.date === y && !yIds.has(lid)),
   };

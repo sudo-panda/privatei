@@ -799,12 +799,14 @@ impl Core {
         let today = self.today();
         let s = self.store.settings();
         let plan_ids = self.plan_log_ids(date);
-        let mut groups: BTreeMap<usize, MealGroup> = BTreeMap::new();
+        // Every meal is always there, empty or not, so the Log keeps the same shape all day.
+        let mut groups: BTreeMap<usize, MealGroup> =
+            MEALS.iter().enumerate().map(|(i, m)| (i, MealGroup { meal: (*m).into(), kcal: 0.0, prot: 0.0, rows: vec![] })).collect();
         let mut logs: Vec<(&String, &Log)> = self.store.all::<Log>().filter(|(_, l)| l.date == date).collect();
         logs.sort_by_key(|(_, l)| l.ts);
         for (id, l) in logs {
             let idx = MEALS.iter().position(|m| *m == l.meal).unwrap_or(1);
-            let g = groups.entry(idx).or_insert_with(|| MealGroup { meal: MEALS[idx].into(), kcal: 0.0, prot: 0.0, rows: vec![] });
+            let g = groups.get_mut(&idx).expect("every meal has a group");
             g.kcal += l.kcal;
             g.prot += l.prot;
             g.rows.push(LogRow {
