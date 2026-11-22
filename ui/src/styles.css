@@ -447,7 +447,7 @@ details > summary::-webkit-details-marker { display: none; }
 .macro + .macro { margin-top: 2px; }
 .macro .mlabel { font: 600 12px var(--f-body); text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
 .macro .mval { font-size: 13px; white-space: nowrap; }
-.macro .mval b { font: 600 17px var(--f-num); color: var(--ink); }
+.macro .mval b { font: 600 17px var(--f-num); color: var(--ink); display: inline-block; min-width: 5ch; text-align: right; } /* same width every row, so the / lines up */
 .macro .mnote { text-align: right; white-space: nowrap; }
 .macro .bar { grid-column: 1 / -1; }
 .macro.energy .mlabel { color: var(--energy); }

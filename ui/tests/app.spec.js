@@ -660,6 +660,8 @@ test('Log always shows the four meals, a compact summary and a floating Add butt
   const summary = await page.locator('#screen-today [aria-label="Energy and protein"]').boundingBox();
   expect(summary.height).toBeLessThan(170);
   await expect(page.getByRole('progressbar', { name: 'Fiber against floor' })).toBeVisible();
+  const slashes = await page.locator('#screen-today .macro .mval .muted').evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().left)));
+  expect(new Set(slashes).size, 'the / lines up in all three rows').toBe(1);
   // The button floats: it stays in the same place on screen when the page scrolls
   const fab = page.getByRole('button', { name: 'Add food', exact: true });
   const before = await fab.boundingBox();
