@@ -6,7 +6,8 @@
   --ink: #2F3A5F;
   --muted: #5E6A9E;
   --accent: #9854F1;
-  --energy: #2E7DE9;
+  --energy: #B15C00;
+  --fiber: #2E7DE9;
   --protein: #587539;
   --warn: #B15C00;
   --over: #F52A65;
@@ -30,7 +31,8 @@
     --ink: #C0CAF5;
     --muted: #9AA5CE;
     --accent: #BB9AF7;
-    --energy: #7AA2F7;
+    --energy: #FF9E64;
+    --fiber: #7AA2F7;
     --protein: #9ECE6A;
     --warn: #FF9E64;
     --over: #F7768E;
@@ -327,7 +329,7 @@ details > summary::-webkit-details-marker { display: none; }
 .chart-bar { fill: var(--energy); }
 .chart-bar.over { fill: var(--over); }
 .chart-bar.prot { fill: var(--protein); }
-.chart-bar.fiber { fill: var(--warn); }
+.chart-bar.fiber { fill: var(--fiber); }
 .chart-bar.short { opacity: 0.45; }
 .chart-bar.train { fill: var(--accent); }
 .chart-bar.muted { fill: var(--line); }
@@ -351,7 +353,7 @@ details > summary::-webkit-details-marker { display: none; }
 .stat-tile.warn b { color: var(--warn); }
 .insight { align-items: flex-start !important; }
 .insight .badge { margin-top: 2px; min-width: 112px; text-align: center; }
-.bar.fiber > span { background: var(--warn); }
+.bar.fiber > span { background: var(--fiber); }
 .bar.fiber.good > span { background: var(--good); }
 .bar.thin { height: 6px; }
 .micro-row { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -386,7 +388,7 @@ details > summary::-webkit-details-marker { display: none; }
 .food-hit:hover, .food-hit:focus-visible { background: var(--soft); }
 .food-hit .name { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
 .food-picked { border: 1px solid var(--accent); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-.badge.src-usda { color: var(--energy); background: color-mix(in srgb, var(--energy) 14%, transparent); }
+.badge.src-usda { color: var(--fiber); background: color-mix(in srgb, var(--fiber) 14%, transparent); }
 .badge.src-swiss { color: var(--over); background: color-mix(in srgb, var(--over) 14%, transparent); }
 .badge.src-table, .badge.src-mine { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
 .nut-groups { display: flex; flex-direction: column; gap: 14px; }
