@@ -1,15 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <rect x="64" y="64" width="896" height="896" rx="200" fill="#0F5257"/>
-  <!-- the eye -->
-  <path d="M152 512 Q512 152 872 512 Q512 872 152 512 Z" fill="#F2F3F0"/>
-  <!-- iris: energy ring (outer) and protein ring (inner), like the Today bars -->
-  <circle cx="512" cy="512" r="135" fill="none" stroke="#D5E2DC" stroke-width="40"/>
-  <circle cx="512" cy="512" r="135" fill="none" stroke="#0F5257" stroke-width="40" stroke-linecap="round"
-          stroke-dasharray="611 848" transform="rotate(-90 512 512)"/>
-  <circle cx="512" cy="512" r="82" fill="none" stroke="#D5E2DC" stroke-width="32"/>
-  <circle cx="512" cy="512" r="82" fill="none" stroke="#3E9156" stroke-width="32" stroke-linecap="round"
-          stroke-dasharray="309 515" transform="rotate(-90 512 512)"/>
-  <!-- pupil and glint -->
-  <circle cx="512" cy="512" r="38" fill="#15181A"/>
-  <circle cx="526" cy="498" r="11" fill="#F2F3F0"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Tokyo Night: thin-line eye; the iris is the energy (blue) and protein (green) rings -->
+  <rect x="6.25" y="6.25" width="87.5" height="87.5" rx="19.5" fill="#1A1B26"/>
+  <path d="M16 50 Q50 16 84 50 Q50 84 16 50 Z" fill="none" stroke="#C0CAF5" stroke-width="2.6" stroke-linejoin="round"/>
+  <circle cx="50" cy="50" r="14" fill="none" stroke="#292E42" stroke-width="3.2"/>
+  <circle cx="50" cy="50" r="14" fill="none" stroke="#7AA2F7" stroke-width="3.2" stroke-linecap="round"
+          stroke-dasharray="63.3 88" transform="rotate(-90 50 50)"/>
+  <circle cx="50" cy="50" r="8" fill="none" stroke="#292E42" stroke-width="2.8"/>
+  <circle cx="50" cy="50" r="8" fill="none" stroke="#9ECE6A" stroke-width="2.8" stroke-linecap="round"
+          stroke-dasharray="30 50.3" transform="rotate(-90 50 50)"/>
 </svg>

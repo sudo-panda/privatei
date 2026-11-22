@@ -1,16 +1,19 @@
 :root {
-  --bg: #F2F3F0;
-  --surface: #FFFFFF;
-  --line: #E0E3DE;
-  --ink: #15181A;
-  --muted: #5D6660;
-  --accent: #0F5257;
-  --warn: #9A5F10;
-  --over: #B4463F;
-  --good: #2E6B3F;
+  /* Tokyo Night Day */
+  --bg: #E1E2E7;
+  --surface: #F6F7FA;
+  --line: #C4C8DA;
+  --ink: #2F3A5F;
+  --muted: #5E6A9E;
+  --accent: #9854F1;
+  --energy: #2E7DE9;
+  --protein: #587539;
+  --warn: #B15C00;
+  --over: #F52A65;
+  --good: #587539;
   --on-accent: #FFFFFF;
-  --soft: rgba(15, 82, 87, 0.08);
-  --shadow: 0 1px 2px rgba(21, 24, 26, 0.06), 0 2px 8px rgba(21, 24, 26, 0.04);
+  --soft: rgba(152, 84, 241, 0.10);
+  --shadow: 0 1px 2px rgba(47, 58, 95, 0.06), 0 2px 8px rgba(47, 58, 95, 0.05);
   --radius: 14px;
   --f-head: "Archivo", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   --f-body: "Source Sans 3", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
@@ -20,17 +23,20 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #15181A;
-    --surface: #1E2224;
-    --line: #2E3437;
-    --ink: #E8EBE6;
-    --muted: #9BA49D;
-    --accent: #6FB57F;
-    --warn: #D99A4E;
-    --over: #E8776B;
-    --good: #6FD08C;
-    --on-accent: #15181A;
-    --soft: rgba(111, 181, 127, 0.12);
+    /* Tokyo Night */
+    --bg: #1A1B26;
+    --surface: #24283B;
+    --line: #2F3549;
+    --ink: #C0CAF5;
+    --muted: #9AA5CE;
+    --accent: #BB9AF7;
+    --energy: #7AA2F7;
+    --protein: #9ECE6A;
+    --warn: #FF9E64;
+    --over: #F7768E;
+    --good: #9ECE6A;
+    --on-accent: #1A1B26;
+    --soft: rgba(187, 154, 247, 0.12);
     --shadow: none;
   }
 }
@@ -139,7 +145,8 @@ input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent);
 .ok { color: var(--good); font-size: 14px; }
 
 .bar { height: 12px; border-radius: 999px; background: var(--line); overflow: hidden; }
-.bar > span { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width 0.25s; }
+.bar > span { display: block; height: 100%; border-radius: 999px; background: var(--energy); transition: width 0.25s; }
+.bar.prot > span { background: var(--protein); }
 .bar.over > span { background: var(--over); box-shadow: 0 0 12px var(--over); }
 .bar.over { box-shadow: 0 0 10px color-mix(in srgb, var(--over) 55%, transparent); }
 .bar.good > span { background: var(--good); }
@@ -160,7 +167,7 @@ input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent);
 
 .toasts { position: fixed; left: 0; right: 0; bottom: 84px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; z-index: 50; padding: 0 16px; }
 .toast { background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-weight: 600; max-width: 440px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
-.toast.error { background: var(--over); color: #fff; }
+.toast.error { background: var(--over); color: var(--on-accent); }
 
 .backdrop { position: fixed; inset: 0; background: rgba(10, 12, 13, 0.45); z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
 .sheet {

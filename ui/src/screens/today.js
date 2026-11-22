@@ -66,7 +66,7 @@ function render() {
     h('div', { class: `bar ${d.over ? 'over' : ''}`, role: 'progressbar', 'aria-label': 'Energy against target', 'aria-valuemin': 0, 'aria-valuemax': n0(d.target), 'aria-valuenow': n0(d.kcal) }, h('span', { style: `width:${kPct}%` })),
     h('div', { class: 'row spread' }, h('h3', { text: 'Protein' }), h('span', { class: `small ${d.protMet ? 'ok' : 'muted'}`, text: d.protMet ? 'Floor reached' : `${n1(d.protFloor - d.prot)} g to go` })),
     h('div', { class: 'row' }, h('span', { class: 'big', 'data-testid': 'prot', text: n1(d.prot) }), h('span', { class: 'muted num', text: `/ ${n0(d.protFloor)} g` })),
-    h('div', { class: `bar ${d.protMet ? 'good' : ''}`, role: 'progressbar', 'aria-label': 'Protein against floor', 'aria-valuemin': 0, 'aria-valuemax': n0(d.protFloor), 'aria-valuenow': n1(d.prot) }, h('span', { style: `width:${pPct}%` })),
+    h('div', { class: `bar prot ${d.protMet ? 'good' : ''}`, role: 'progressbar', 'aria-label': 'Protein against floor', 'aria-valuemin': 0, 'aria-valuemax': n0(d.protFloor), 'aria-valuenow': n1(d.prot) }, h('span', { style: `width:${pPct}%` })),
     d.burn > 0
       ? h(
           'label',

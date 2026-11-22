@@ -335,16 +335,16 @@ test.describe('dark mode', () => {
   test('follows the system', async ({ page }) => {
     await open(page);
     const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    expect(bg).toBe('rgb(21, 24, 26)');
+    expect(bg).toBe('rgb(26, 27, 38)');
     const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
-    expect(accent.toUpperCase()).toBe('#6FB57F');
+    expect(accent.toUpperCase()).toBe('#BB9AF7');
   });
 });
 
 test('light mode colours', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await open(page);
-  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(242, 243, 240)');
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(225, 226, 231)');
 });
 
 test('3000 log rows: every tab renders in under 400 ms', async ({ page }) => {
