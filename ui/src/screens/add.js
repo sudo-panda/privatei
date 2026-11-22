@@ -97,7 +97,7 @@ function mount(root, o = {}) {
       h('div', { class: 'card add-inline', 'aria-label': 'Add food' },
         h('div', { class: 'row spread' }, h('h2', { text: 'Add food' }), els.target),
         search,
-        h('div', { class: 'small muted', text: 'Your usual foods — tap to log again:' }),
+        h('div', { class: 'small muted', text: 'Your usual foods — tap to add to the draft:' }),
         els.recent,
         h('div', { class: 'small muted', text: 'Or describe it — known foods are worked out on your Mac, the rest by AI:' }),
         text, h('div', { class: 'grid2' }, work, photoBtn), photoInput, els.status,
@@ -263,12 +263,13 @@ async function refresh(opts = {}) {
           h('button', {
             type: 'button',
             class: 'chip',
-            'aria-label': `Log ${r.name} again`,
-            onclick: async () => {
-              await call('add_log', { date: state.date, entry: { meal: '', name: r.name, grams: r.grams, kcal: r.kcal, prot: r.prot, est: r.est } });
-              toast(`Logged ${r.name}`);
-              changed();
-              els.onLogged();
+            'aria-label': `Add ${r.name} to the draft`,
+            onclick: () => {
+              // Into the draft, next to anything you described; Save logs it all at once.
+              const d = draft || { items: [], unknown: [], note: '', provider: null, providerText: null, error: null };
+              d.items.push({ name: r.name, grams: r.grams ?? null, kcal: r.kcal, prot: r.prot, est: r.est, meal: guessMeal(), fiber: r.fiber ?? null, nut: r.nut ?? null });
+              setDraft(d);
+              els.draft.scrollIntoView({ block: 'nearest' });
             },
           }, h('span', { text: r.name })),
         )

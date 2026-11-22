@@ -116,8 +116,12 @@ test.describe('Add', () => {
     await page.locator('#m-kcal').fill('150');
     await page.getByRole('button', { name: 'Log it' }).click();
     await expect(page.locator('#m-name')).toHaveValue('');
-    await expect(page.getByLabel('Log Egg again')).toBeVisible();
-    await page.getByLabel('Log Egg again').click();
+    await expect(page.getByLabel('Add Egg to the draft')).toBeVisible();
+    await page.getByLabel('Add Egg to the draft').click();
+    await page.getByLabel('Add Egg to the draft').click(); // twice: two items in the draft
+    await expect(page.locator('#draft [data-draft]')).toHaveCount(2);
+    await page.locator('#draft').getByLabel('Remove Egg').first().click();
+    await page.locator('#draft').getByRole('button', { name: 'Save' }).click();
     await tab(page, 'today').click();
     await expect(page.getByTestId('kcal')).toHaveText('300');
   });
@@ -624,4 +628,22 @@ test('Add food opens as a centred panel at any width', async ({ page }) => {
     expect(Math.abs(middle - hgt / 2), `vertically centred at ${w}px`).toBeLessThan(hgt * 0.15);
     expect(box.y, `not stuck to the bottom at ${w}px`).toBeGreaterThan(8);
   }
+});
+
+test('Usual-food chips go into the draft next to what you described', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=rich&layout=new&hhmm=08:00');
+  await page.locator('#open-add').click();
+  await page.locator('#describe').fill('1 banana');
+  await page.getByRole('button', { name: 'Work out the calories' }).click();
+  await expect(page.locator('#draft [data-draft]')).toHaveCount(1);
+  const chip = page.locator('.overlay-sheet .chips .chip').first();
+  const name = (await chip.getAttribute('aria-label')).replace(/^Add | to the draft$/g, '');
+  await chip.click();
+  await expect(page.locator('#draft [data-draft]')).toHaveCount(2);
+  await expect(page.locator('#draft')).toContainText(name);
+  await expect(page.locator('.overlay-sheet')).toBeVisible(); // nothing logged yet
+  await page.locator('#draft').getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.toast').last()).toHaveText('Saved 2 items');
+  await expect(page.locator('.overlay-sheet')).toBeHidden();
 });
