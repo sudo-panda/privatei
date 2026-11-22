@@ -430,3 +430,9 @@ details > summary::-webkit-details-marker { display: none; }
 .badge.src-recipe { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
 .badge.src-off { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
 .online-row { padding: 6px 4px; border-top: 1px solid var(--line); }
+
+/* Faint fade where days are hidden off the edge of the date bar. */
+.strip-track { --fade: 28px; }
+.strip-track.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--fade)), transparent); mask-image: linear-gradient(to right, #000 calc(100% - var(--fade)), transparent); }
+.strip-track.more-left { -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade)); mask-image: linear-gradient(to right, transparent, #000 var(--fade)); }
+.strip-track.more-left.more-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); mask-image: linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); }

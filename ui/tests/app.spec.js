@@ -588,9 +588,12 @@ test('Log date bar: scrolls to the selected day, Today pinned and outlined', asy
   await expect(todayBtn).toBeInViewport(); // never scrolled away
   await expect(todayBtn).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('#date-chip')).toContainText('not today');
+  await expect(page.locator('.strip-track')).toHaveClass(/more-right/); // days hidden before Today
+
   await todayBtn.click();
   await expect(todayBtn).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByLabel('Next day')).toBeDisabled();
+  await expect(page.locator('.strip-track')).not.toHaveClass(/more-right/); // nothing hidden next to Today
   // One combined bar: no separate date card.
   await expect(page.locator('#day-label')).toHaveCount(0);
 });

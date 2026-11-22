@@ -97,6 +97,14 @@ function renderStrip() {
       track.scrollTo({ left: sel.offsetLeft + sel.offsetWidth - track.clientWidth + pad, behavior: 'smooth' });
     }
   }
+  // Fade an edge when days are hidden past it (e.g. between the visible days and Today).
+  const edges = () => {
+    const max = track.scrollWidth - track.clientWidth;
+    track.classList.toggle('more-left', track.scrollLeft > 2);
+    track.classList.toggle('more-right', track.scrollLeft < max - 2);
+  };
+  edges();
+  track.addEventListener('scroll', edges, { passive: true });
   const chip = document.getElementById('date-chip');
   if (chip) {
     const [y, m, dd] = d.date.split('-').map(Number);
