@@ -15,6 +15,7 @@ pub mod importers;
 pub mod meds;
 pub mod model;
 pub mod nutrients;
+pub mod off;
 pub mod store;
 pub mod training;
 

@@ -421,3 +421,5 @@ details > summary::-webkit-details-marker { display: none; }
 .recipe-totals { border-top: 1px solid var(--line); padding-top: 8px; }
 .badge.src-cofid { color: var(--accent); background: var(--soft); }
 .badge.src-recipe { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.badge.src-off { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.online-row { padding: 6px 4px; border-top: 1px solid var(--line); }

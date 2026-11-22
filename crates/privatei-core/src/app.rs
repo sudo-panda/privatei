@@ -1468,6 +1468,13 @@ impl Core {
         db.replace_source(&crate::importers::swiss_info(version), &foods)
     }
 
+    /// Save products fetched from Open Food Facts and return them as foods.
+    pub fn save_off(&mut self, foods: Vec<crate::fooddb::NewFood>) -> Result<Vec<crate::fooddb::DbFood>> {
+        let db = self.foods.as_ref().ok_or("The food database isn't open.")?;
+        db.add_foods(&crate::off::info(), &foods)?;
+        Ok(foods.iter().filter_map(|f| db.get(&format!("off:{}", f.source_id))).collect())
+    }
+
     pub fn remove_food_source(&mut self, id: &str) -> Result<()> {
         if id == "usda" || id == "cofid" {
             return Err("That database comes with the app and can't be removed.".into());

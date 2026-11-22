@@ -546,3 +546,26 @@ test('Recipes: build from ingredients, then log a serving from search', async ({
   await page.getByRole('button', { name: 'Add to log' }).click();
   await expect(page.locator('[data-meal="Dinner"]')).toContainText('Masoor dal');
 });
+
+test('Open Food Facts: look up packaged products online, then log one', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&hhmm=08:00');
+  await page.locator('#open-add').click();
+  await page.locator('#food-search').fill('skyr');
+  await page.locator('#food-search-online').click();
+  const hit = page.locator('.food-hit', { hasText: 'Skyr vanilla' });
+  await expect(hit).toContainText('Product');
+  await hit.click();
+  await page.locator('.food-picked .chip', { hasText: '1 serving' }).click();
+  await page.locator('.food-picked').getByRole('button', { name: 'Breakfast', exact: true }).click();
+  await page.getByRole('button', { name: 'Add to log' }).click();
+  await expect(page.locator('[data-meal="Breakfast"]')).toContainText('Skyr vanilla');
+  // Offline afterwards: it's now in local search, and listed with its licence in Settings.
+  await page.evaluate(() => (window.__mock.online = false));
+  await page.locator('#open-add').click();
+  await page.locator('#food-search').fill('skyr van');
+  await expect(page.locator('.food-hit').first()).toContainText('Skyr vanilla');
+  await page.keyboard.press('Escape');
+  await page.locator('#open-settings').click();
+  await expect(page.locator('[data-source="off"]')).toContainText('Open Food Facts');
+});

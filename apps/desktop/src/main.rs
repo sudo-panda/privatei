@@ -160,6 +160,12 @@ async fn download_swiss(s: State<'_, AppState>) -> R<usize> {
 }
 
 #[tauri::command]
+async fn search_off(s: State<'_, AppState>, query: String) -> R<Vec<privatei_core::fooddb::DbFood>> {
+    let foods = off_thread(move || privatei_core::off::fetch(&query, privatei_core::off::BASE)).await??;
+    with(&s, |c| c.save_off(foods))
+}
+
+#[tauri::command]
 fn remove_food_source(s: State<AppState>, id: String) -> R<()> {
     with(&s, |c| c.remove_food_source(&id))
 }
@@ -466,6 +472,7 @@ fn main() {
             get_recipes,
             delete_recipe,
             download_swiss,
+            search_off,
             remove_food_source,
             food_names,
             get_meds,

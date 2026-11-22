@@ -258,6 +258,60 @@ impl FoodDb {
         }
     }
 
+    /// Add or update foods of a source without touching its other foods (Open Food Facts cache).
+    pub fn add_foods(&self, info: &SourceInfo, foods: &[NewFood]) -> Result<usize> {
+        let c = self.writable()?;
+        c.execute_batch("BEGIN").map_err(err)?;
+        let r = (|| {
+            let mut n = 0;
+            for f in foods {
+                if f.name.trim().is_empty() || !f.kcal100.is_finite() {
+                    continue;
+                }
+                let old: Option<i64> = c
+                    .query_row("SELECT id FROM food WHERE source = ?1 AND source_id = ?2", params![info.id, f.source_id], |r| r.get(0))
+                    .optional()
+                    .map_err(err)?;
+                if let Some(id) = old {
+                    c.execute("DELETE FROM portion WHERE food_id = ?1", [id]).map_err(err)?;
+                    c.execute("DELETE FROM food WHERE id = ?1", [id]).map_err(err)?;
+                }
+                let nut = serde_json::to_string(&nutrients::clean(&f.nut100)).map_err(err)?;
+                let r1 = |x: f64| (x * 10.0).round() / 10.0;
+                c.execute(
+                    "INSERT INTO food (source, source_id, name, category, kcal, prot, nut) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![info.id, f.source_id, f.name.trim(), f.category, r1(f.kcal100), r1(f.prot100), nut],
+                )
+                .map_err(err)?;
+                let id = c.last_insert_rowid();
+                for p in &f.portions {
+                    c.execute("INSERT INTO portion (food_id, label, grams) VALUES (?1, ?2, ?3)", params![id, p.label, p.grams])
+                        .map_err(err)?;
+                }
+                n += 1;
+            }
+            let count: i64 = c.query_row("SELECT COUNT(*) FROM food WHERE source = ?1", [&info.id], |r| r.get(0)).map_err(err)?;
+            c.execute(
+                "INSERT INTO source (id, name, version, licence, attribution, url, imported_at, foods) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)
+                 ON CONFLICT(id) DO UPDATE SET imported_at=excluded.imported_at, foods=excluded.foods",
+                params![info.id, info.name, info.version, info.licence, info.attribution, info.url, crate::dates::now_ms(), count],
+            )
+            .map_err(err)?;
+            c.execute_batch("INSERT INTO food_fts(food_fts) VALUES('rebuild')").map_err(err)?;
+            Ok(n)
+        })();
+        match r {
+            Ok(n) => {
+                c.execute_batch("COMMIT").map_err(err)?;
+                Ok(n)
+            }
+            Err(e) => {
+                let _ = c.execute_batch("ROLLBACK");
+                Err(e)
+            }
+        }
+    }
+
     /// Remove a downloaded source.
     pub fn remove_source(&self, id: &str) -> Result<()> {
         let c = self.writable()?;
@@ -426,6 +480,12 @@ mod tests {
         assert_eq!(db.search("rosti", 5)[0].reference, "swiss:A1", "diacritics ignored");
         assert_eq!(db.replace_source(&info, &foods).unwrap(), 1, "re-import replaces, no duplicates");
         assert_eq!(db.search("rosti", 5).len(), 1);
+        // Adding foods to a source keeps the others (an online-lookup cache).
+        let more = vec![NewFood { source_id: "B2".into(), name: "Birchermüesli".into(), kcal100: 120.0, ..Default::default() }];
+        assert_eq!(db.add_foods(&info, &more).unwrap(), 1);
+        assert_eq!(db.add_foods(&info, &more).unwrap(), 1, "updating, not duplicating");
+        assert_eq!(db.sources().iter().find(|s| s.id == "swiss").unwrap().foods, 2);
+        assert_eq!(db.search("birch", 5).len(), 1);
         db.remove_source("swiss").unwrap();
         assert!(db.search("rosti", 5).is_empty());
         assert_eq!(db.sources().len(), 1);

@@ -62,6 +62,7 @@ const db = {
   aiAvailable: true,
   online: true,
   swiss: [],
+  off: [],
   sources: [{ id: 'cofid', name: 'UK CoFID (McCance and Widdowson)', version: '2021', licence: 'Open Government Licence v3.0', attribution: "Contains public sector information licensed under the Open Government Licence v3.0. McCance and Widdowson's Composition of Foods Integrated Dataset, Public Health England / OHID.", url: 'https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid', importedAt: 0, foods: 2882 }, { id: 'usda', name: 'USDA FoodData Central', version: 'SR Legacy 2018-04 + Foundation 2026-10', licence: 'Public domain (CC0 1.0)', attribution: 'U.S. Department of Agriculture, Agricultural Research Service. FoodData Central (SR Legacy, Foundation Foods). fdc.nal.usda.gov', url: 'https://fdc.nal.usda.gov/download-datasets/', importedAt: 0, foods: 8237 }],
   ts: 1,
   calls: [],
@@ -162,6 +163,12 @@ const SWISS_SAMPLE = [
   { ref: 'swiss:sample-2', name: 'Birchermüesli (sample row)', source: 'swiss', sourceName: 'Swiss Food Composition Database', category: 'Cereals', kcal100: 120, prot100: 4, nut100: { fiber: 2.5, calcium: 90, vitC: 6 }, portions: [] },
   { ref: 'swiss:sample-3', name: 'Appenzeller cheese (sample row)', source: 'swiss', sourceName: 'Swiss Food Composition Database', category: 'Hard cheese', kcal100: 390, prot100: 25, nut100: { calcium: 800, sodium: 700, satFat: 20 }, portions: [] },
 ];
+// Made-up packaged products standing in for Open Food Facts answers.
+const OFF_SAMPLE = [
+  { ref: 'off:7610000000011', name: 'Skyr nature (sample brand)', source: 'off', sourceName: 'Open Food Facts', category: 'Packaged product', kcal100: 62, prot100: 11, nut100: { sugar: 4, addedSugar: 0, fat: 0.2, satFat: 0.1, sodium: 40, calcium: 120 }, portions: [{ label: '1 serving', grams: 150 }] },
+  { ref: 'off:7610000000028', name: 'Skyr vanilla (sample brand)', source: 'off', sourceName: 'Open Food Facts', category: 'Packaged product', kcal100: 85, prot100: 9.5, nut100: { sugar: 9, addedSugar: 5, fat: 0.2, sodium: 44 }, portions: [{ label: '1 serving', grams: 150 }] },
+  { ref: 'off:7610000000035', name: 'Protein bar peanut (sample brand)', source: 'off', sourceName: 'Open Food Facts', category: 'Packaged product', kcal100: 360, prot100: 33, nut100: { sugar: 3, addedSugar: 2, fiber: 15, satFat: 4.5, sodium: 280 }, portions: [{ label: '1 serving', grams: 55 }] },
+];
 const norm = (t) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 function builtin() {
   const out = Object.entries(TABLE).map(([name, [k, p, piece]]) => ({ ref: `table:${name}`, name: name[0].toUpperCase() + name.slice(1), source: 'table', sourceName: 'Built-in table', category: '', kcal100: k, prot100: p, nut100: { ...(nutr(name, 100).nut || {}), ...(nutr(name, 100).fiber != null ? { fiber: nutr(name, 100).fiber } : {}) }, portions: piece ? [{ label: '1 piece', grams: piece }] : [] }));
@@ -169,7 +176,7 @@ function builtin() {
   return out;
 }
 function allFoods() {
-  return [...builtin(), ...USDA_SAMPLE, ...db.swiss];
+  return [...builtin(), ...USDA_SAMPLE, ...db.swiss, ...db.off];
 }
 function recipeView(rid, r) {
   const raw = r.ingredients.reduce((a, i) => a + i.grams, 0);
@@ -208,7 +215,7 @@ function searchFoods(q) {
   const hit = (name) => { const ws = norm(name).split(/[^a-z0-9]+/); return words.every((w) => ws.some((n) => n.startsWith(w))); };
   const score = (f) => { const ws = norm(f.name).split(/[^a-z0-9]+/); return words.filter((w) => ws.includes(w)).length * 2 + (norm(f.name).startsWith(words[0]) ? 3 : 0) - f.name.length / 60; };
   const local = [...recipeFoods(), ...builtin()].filter((f) => hit(f.name)).slice(0, 6);
-  const dbHits = [...USDA_SAMPLE, ...db.swiss].filter((f) => hit(f.name) || hit(f.category)).sort((a, b) => score(b) - score(a));
+  const dbHits = [...USDA_SAMPLE, ...db.swiss, ...db.off].filter((f) => hit(f.name) || hit(f.category)).sort((a, b) => score(b) - score(a));
   return [...local, ...dbHits].slice(0, 30).map((f) => ({ ...f, fiber100: f.nut100.fiber ?? null, known: Object.keys(f.nut100).length }));
 }
 
@@ -636,6 +643,13 @@ const handlers = {
     return lid;
   },
   food_sources: () => db.sources,
+  search_off: ({ query }) => {
+    if (!db.online) throw "Couldn't reach Open Food Facts (offline?).";
+    const found = OFF_SAMPLE.filter((f) => norm(f.name).includes(norm(query).split(' ')[0]) || f.ref === `off:${query.trim()}`);
+    for (const f of found) if (!db.off.some((x) => x.ref === f.ref)) db.off.push(f);
+    if (found.length && !db.sources.some((x) => x.id === 'off')) db.sources = [...db.sources, { id: 'off', name: 'Open Food Facts', version: 'looked up online', licence: 'Open Database License (ODbL) 1.0', attribution: 'Product data © Open Food Facts contributors, openfoodfacts.org', url: 'https://world.openfoodfacts.org', importedAt: Date.now(), foods: db.off.length }];
+    return found.map((f) => ({ ...f, fiber100: f.nut100.fiber ?? null, known: Object.keys(f.nut100).length }));
+  },
   ingredient: ({ reference, grams }) => {
     const f = foodByRef(reference);
     if (!f) throw "That food isn't in your databases any more.";

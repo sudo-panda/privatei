@@ -276,3 +276,24 @@ fn core_estimate_without_ai_names_the_rest() {
     assert_eq!(v.unknown, vec!["some mystery stew"]);
     assert!(v.error.unwrap().starts_with("No AI is set up"));
 }
+
+#[test]
+fn open_food_facts_barcode_lookup() {
+    let (base, rx) = mock_server(
+        200,
+        r#"{"product":{"product_name":"Skyr nature","brands":"Emmi","serving_quantity":150,"nutriments":{"energy-kcal_100g":62,"proteins_100g":11,"sugars_100g":4}}}"#,
+    );
+    let foods = privatei_core::off::fetch("7610032000001", &base).unwrap();
+    assert_eq!(foods.len(), 1);
+    assert_eq!((foods[0].source_id.as_str(), foods[0].name.as_str(), foods[0].kcal100), ("7610032000001", "Skyr nature (Emmi)", 62.0));
+    let got = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert!(got.request_line.starts_with("GET /v1beta/api/v2/product/7610032000001.json"), "{}", got.request_line);
+    assert!(got.headers.iter().any(|h| h.to_lowercase().starts_with("user-agent: private-i/")), "identifies the app");
+    // Saved for offline use, then loggable like any food.
+    let mut core = privatei_core::Core::in_memory();
+    core.foods = Some(privatei_core::fooddb::sample_db());
+    let saved = core.save_off(foods).unwrap();
+    assert_eq!(saved[0].reference, "off:7610032000001");
+    assert_eq!(core.search_foods("skyr nature", 5).iter().filter(|f| f.source == "off").count(), 1);
+    assert!(privatei_core::off::fetch("x", &base).unwrap().is_empty(), "too short to search");
+}

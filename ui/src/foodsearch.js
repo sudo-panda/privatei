@@ -27,14 +27,41 @@ export function foodSearch(opts) {
     fill(
       results,
       hits.length
-        ? hits.slice(0, 12).map((f) =>
-            h('button', { type: 'button', class: 'food-hit', role: 'option', 'data-ref': f.ref, 'aria-label': `${f.name}, ${SOURCE[f.source] || f.sourceName}`, onclick: () => pick(f) },
-              h('span', { class: 'name' }, h('span', { text: f.name }), h('span', { class: 'meta', text: [f.category, `${f.known} nutrients`].filter(Boolean).join(' · ') })),
-              h('span', { class: `badge src-${f.source}`, text: SOURCE[f.source] || f.sourceName }),
-              h('span', { class: 'num small muted', text: `${n0(f.kcal100)} kcal · ${n1(f.prot100)} g /100 g` })))
-        : h('p', { class: 'small muted', text: 'Nothing found. Try fewer or different words, or describe it below and the AI will work it out.' }),
+        ? hits.slice(0, 12).map(hitButton)
+        : h('p', { class: 'small muted', text: 'Nothing found in your databases. Try fewer words, look it up online below, or describe it and the AI will work it out.' }),
+      opts.online === false ? null : onlineButton(q),
     );
   };
+
+  /** Look packaged products up on Open Food Facts (online; the results are kept for offline use). */
+  function onlineButton(q) {
+    const status = h('span', { class: 'small muted', role: 'status' });
+    const btn = h('button', { type: 'button', class: 'ghost', id: `${opts.id || 'food-search'}-online` }, /^\d{8,}$/.test(q) ? `Look up barcode ${q} online` : 'Search packaged products online');
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      status.textContent = 'Asking Open Food Facts…';
+      try {
+        const found = await quiet('search_off', { query: q });
+        if (!found.length) {
+          status.textContent = 'No packaged products found.';
+          btn.disabled = false;
+          return;
+        }
+        fill(results, found.map(hitButton), h('p', { class: 'small muted', text: 'From Open Food Facts (ODbL). Saved so they work offline next time.' }));
+      } catch (e) {
+        status.textContent = String(e && e.message ? e.message : e);
+        btn.disabled = false;
+      }
+    });
+    return h('div', { class: 'row wrap online-row' }, btn, status);
+  }
+
+  function hitButton(f) {
+    return h('button', { type: 'button', class: 'food-hit', role: 'option', 'data-ref': f.ref, 'aria-label': `${f.name}, ${SOURCE[f.source] || f.sourceName}`, onclick: () => pick(f) },
+      h('span', { class: 'name' }, h('span', { text: f.name }), h('span', { class: 'meta', text: [f.category, `${f.known} nutrients`].filter(Boolean).join(' · ') })),
+      h('span', { class: `badge src-${f.source}`, text: SOURCE[f.source] || f.sourceName }),
+      h('span', { class: 'num small muted', text: `${n0(f.kcal100)} kcal · ${n1(f.prot100)} g /100 g` }));
+  }
   input.addEventListener('input', () => {
     clearTimeout(timer);
     timer = setTimeout(run, 120);
