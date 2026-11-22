@@ -124,6 +124,31 @@ fn add_food(s: State<AppState>, date: String, meal: String, reference: String, g
 }
 
 #[tauri::command]
+fn ingredient(s: State<AppState>, reference: String, grams: f64) -> R<privatei_core::model::Ingredient> {
+    with(&s, |c| c.ingredient(&reference, grams))
+}
+
+#[tauri::command]
+fn recipe_preview(s: State<AppState>, recipe: RecipeInput) -> R<RecipeView> {
+    with(&s, |c| c.recipe_preview(recipe))
+}
+
+#[tauri::command]
+fn save_recipe(s: State<AppState>, id: Option<String>, recipe: RecipeInput) -> R<String> {
+    with(&s, |c| c.save_recipe(id, recipe))
+}
+
+#[tauri::command]
+fn get_recipes(s: State<AppState>) -> R<Vec<RecipeView>> {
+    with(&s, |c| Ok(c.recipes()))
+}
+
+#[tauri::command]
+fn delete_recipe(s: State<AppState>, id: String) -> R<()> {
+    with(&s, |c| c.delete_recipe(&id))
+}
+
+#[tauri::command]
 fn food_sources(s: State<AppState>) -> R<Vec<privatei_core::fooddb::SourceInfo>> {
     with(&s, |c| Ok(c.food_sources()))
 }
@@ -435,6 +460,11 @@ fn main() {
             food_detail,
             add_food,
             food_sources,
+            ingredient,
+            recipe_preview,
+            save_recipe,
+            get_recipes,
+            delete_recipe,
             download_swiss,
             remove_food_source,
             food_names,

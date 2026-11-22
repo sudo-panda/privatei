@@ -1,4 +1,5 @@
 use privatei_core::app::{Clock, LogInput, MedInput};
+use privatei_core::model::Ingredient;
 use privatei_core::model::*;
 use privatei_core::Core;
 
@@ -607,4 +608,40 @@ fn edit_log_plan_and_training() {
         (d.workouts[0].kind.as_str(), d.workouts[0].mins, d.workouts[0].kcal, d.workouts[0].name.as_str()),
         ("cycle", 60.0, 500.0, "Spin")
     );
+}
+
+#[test]
+fn recipes_from_ingredients() {
+    let mut c = core("2026-11-22", "19:00");
+    c.foods = Some(privatei_core::fooddb::sample_db());
+    let lentils = c.ingredient("usda:2", 400.0).unwrap();
+    assert_eq!((lentils.kcal, lentils.fiber), (464.0, Some(31.6)));
+    let oil = c.ingredient("table:oil", 15.0).unwrap();
+    let input = |name: &str, ings: Vec<Ingredient>| privatei_core::app::RecipeInput {
+        name: name.into(),
+        servings: 4.0,
+        cooked_grams: Some(1200.0),
+        ingredients: ings,
+        note: String::new(),
+    };
+    let preview = c.recipe_preview(input("Dal", vec![lentils.clone(), oil.clone()])).unwrap();
+    assert_eq!((preview.total.kcal, preview.per_serving.kcal, preview.per_serving.grams), (597.0, 149.0, 300.0));
+    assert!(c.save_recipe(None, input("", vec![oil.clone()])).is_err());
+    assert!(c.save_recipe(None, input("Empty", vec![])).is_err());
+    let id = c.save_recipe(None, input("Dal", vec![lentils, oil])).unwrap();
+    // Recipes come up first in search and log like any food.
+    let hits = c.search_foods("dal", 10);
+    assert_eq!(hits[0].reference, format!("recipe:{id}"));
+    assert_eq!(hits[0].portions[0].grams, 300.0);
+    c.add_food("2026-11-22", "Dinner", &format!("recipe:{id}"), 300.0).unwrap();
+    let d = c.day("2026-11-22").unwrap();
+    assert_eq!((d.kcal, d.fiber), (149.0, 7.9));
+    assert_eq!(d.nutrients.iter().find(|n| n.key == "folate").unwrap().amount, 181.0);
+    // It survives an export/import round trip.
+    let text = c.export_json();
+    let mut c2 = core("2026-11-22", "12:00");
+    c2.import_json(&text).unwrap();
+    assert_eq!(c2.recipes()[0].name, "Dal");
+    c.delete_recipe(&id).unwrap();
+    assert!(c.recipes().is_empty());
 }

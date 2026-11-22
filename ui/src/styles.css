@@ -392,3 +392,30 @@ details > summary::-webkit-details-marker { display: none; }
 .nut-groups { display: flex; flex-direction: column; gap: 14px; }
 .nut-group h3 { margin-bottom: 6px; }
 @media (max-width: 520px) { .food-hit { grid-template-columns: 1fr auto; } .food-hit .num { grid-column: 1 / -1; } }
+
+/* ---------- Food table (Log) ---------- */
+.food-table { display: flex; flex-direction: column; }
+.food-group { display: flex; flex-direction: column; }
+.food-group + .food-group { margin-top: 10px; }
+.food-row { display: grid; grid-template-columns: minmax(0, 1fr) 52px 60px 48px; column-gap: 10px; align-items: center; padding: 8px 6px; border: 0; border-radius: 8px; background: transparent; text-align: left; font-weight: 400; min-height: 0; width: 100%; color: var(--ink); }
+.food-row.row-edit { border-radius: 8px; }
+.food-row.row-edit + .food-row.row-edit { border-top: 1px solid var(--line); border-radius: 0; }
+.food-row .fc { text-align: right; font-size: 14px; }
+.food-row .fn { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.fname { font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
+.famount { font-size: 12px; color: var(--muted); }
+.food-head { padding-top: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--line); border-radius: 0; }
+.food-head .fn { font: 600 12px var(--f-body); text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.food-head .fc { font-size: 12px; color: var(--muted); }
+.food-cols { padding-top: 0; padding-bottom: 2px; }
+.food-cols .fc { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-family: var(--f-body); }
+@media (max-width: 420px) { .food-row { grid-template-columns: minmax(0, 1fr) 44px 48px; } .food-row .fc:last-child { display: none; } }
+
+/* ---------- Overlay (Add food) ---------- */
+.overlay-sheet { max-width: 680px; }
+.overlay-body { display: flex; flex-direction: column; gap: 12px; }
+.overlay-body .add-inline { border: 0; padding: 0; box-shadow: none; }
+.overlay-body .add-inline > .row:first-child h2 { display: none; }
+.recipe-card { text-align: left; width: 100%; font-weight: 400; align-items: stretch; }
+.recipe-card:hover { border-color: var(--accent); }
+.recipe-totals { border-top: 1px solid var(--line); padding-top: 8px; }

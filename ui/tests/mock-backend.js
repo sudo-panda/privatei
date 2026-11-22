@@ -56,6 +56,7 @@ const cmpDate = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 const db = {
   log: {}, plan: {}, stock: {}, list: {}, meds: {}, medlog: {}, workouts: {}, foods: {},
+  recipes: {},
   rules: '', settings: { addBurn: false, weightKg: 82, kcalTarget: 1500, protFloor: 90, fiberFloor: 30 },
   ai: { order: ['claude', 'gemini'], geminiKey: '', geminiModel: 'gemini-flash-latest', claudeModel: '', claudePath: '' },
   aiAvailable: true,
@@ -170,8 +171,35 @@ function builtin() {
 function allFoods() {
   return [...builtin(), ...(db.sources.some((x) => x.id === 'usda') ? USDA_SAMPLE : []), ...db.swiss];
 }
+function recipeView(rid, r) {
+  const raw = r.ingredients.reduce((a, i) => a + i.grams, 0);
+  const grams = r.cookedGrams || raw;
+  const kcal = r.ingredients.reduce((a, i) => a + i.kcal, 0), prot = r.ingredients.reduce((a, i) => a + i.prot, 0);
+  const hasF = r.ingredients.some((i) => i.fiber != null);
+  const fiber = hasF ? r.ingredients.reduce((a, i) => a + (i.fiber || 0), 0) : null;
+  const sv = r.servings || 1;
+  return { id: rid, name: r.name, servings: r.servings, cookedGrams: r.cookedGrams ?? null, note: r.note || '', ingredients: r.ingredients,
+    total: { grams: Math.round(grams), kcal: Math.round(kcal), prot: r1(prot), fiber: hasF ? r1(fiber) : null },
+    perServing: { grams: Math.round(grams / sv), kcal: Math.round(kcal / sv), prot: r1(prot / sv), fiber: hasF ? r1(fiber / sv) : null }, known: 0 };
+}
+function recipeFoods() {
+  return Object.entries(db.recipes).map(([rid, r]) => {
+    const v = recipeView(rid, r);
+    const k = 100 / (v.total.grams || 1);
+    const nut = {};
+    for (const i of r.ingredients) for (const [kk, vv] of Object.entries(i.nut || {})) nut[kk] = (nut[kk] || 0) + vv * k;
+    if (v.total.fiber != null) nut.fiber = v.total.fiber * k;
+    return { ref: `recipe:${rid}`, name: r.name, source: 'recipe', sourceName: 'My recipes', category: `${r.servings} servings`, kcal100: v.total.kcal * k, prot100: v.total.prot * k, nut100: nut, portions: [{ label: '1 serving', grams: v.perServing.grams }, { label: 'whole recipe', grams: v.total.grams }] };
+  });
+}
+function cleanRecipe(r) {
+  if (!r.name || !r.name.trim()) throw 'Give the recipe a name.';
+  if (!(r.servings > 0 && r.servings <= 100)) throw 'Servings must be between 1 and 100.';
+  if (!r.ingredients || !r.ingredients.length) throw 'Add at least one ingredient.';
+  return { name: r.name.trim(), servings: r.servings, cookedGrams: r.cookedGrams || null, ingredients: r.ingredients, note: r.note || '' };
+}
 function foodByRef(ref) {
-  const f = allFoods().find((x) => x.ref === ref);
+  const f = [...recipeFoods(), ...allFoods()].find((x) => x.ref === ref);
   return f ? { ...f, fiber100: f.nut100.fiber ?? null, known: Object.keys(f.nut100).length } : null;
 }
 function searchFoods(q) {
@@ -179,7 +207,7 @@ function searchFoods(q) {
   if (!words.length) return [];
   const hit = (name) => { const ws = norm(name).split(/[^a-z0-9]+/); return words.every((w) => ws.some((n) => n.startsWith(w))); };
   const score = (f) => { const ws = norm(f.name).split(/[^a-z0-9]+/); return words.filter((w) => ws.includes(w)).length * 2 + (norm(f.name).startsWith(words[0]) ? 3 : 0) - f.name.length / 60; };
-  const local = builtin().filter((f) => hit(f.name)).slice(0, 4);
+  const local = [...recipeFoods(), ...builtin()].filter((f) => hit(f.name)).slice(0, 6);
   const dbHits = [...USDA_SAMPLE, ...db.swiss].filter((f) => hit(f.name) || hit(f.category)).sort((a, b) => score(b) - score(a));
   return [...local, ...dbHits].slice(0, 30).map((f) => ({ ...f, fiber100: f.nut100.fiber ?? null, known: Object.keys(f.nut100).length }));
 }
@@ -608,6 +636,17 @@ const handlers = {
     return lid;
   },
   food_sources: () => db.sources,
+  ingredient: ({ reference, grams }) => {
+    const f = foodByRef(reference);
+    if (!f) throw "That food isn't in your databases any more.";
+    const k = grams / 100;
+    const nut = Object.fromEntries(Object.entries(f.nut100).filter(([key]) => key !== 'fiber').map(([key, v]) => [key, Math.round(v * k * 1000) / 1000]));
+    return { name: f.name, foodRef: f.ref, grams: Math.round(grams), kcal: Math.round(f.kcal100 * k), prot: r1(f.prot100 * k), fiber: f.nut100.fiber != null ? r1(f.nut100.fiber * k) : null, nut };
+  },
+  recipe_preview: ({ recipe }) => recipeView('', cleanRecipe(recipe)),
+  save_recipe: ({ id: rid, recipe }) => { const k = rid || id(); db.recipes[k] = cleanRecipe(recipe); return k; },
+  get_recipes: () => Object.entries(db.recipes).map(([rid, r]) => recipeView(rid, r)).sort((a, b) => a.name.localeCompare(b.name)),
+  delete_recipe: ({ id: rid }) => { delete db.recipes[rid]; },
   download_swiss: () => {
     if (!db.online) throw "Couldn't reach naehrwertdaten.ch (offline?).";
     db.swiss = SWISS_SAMPLE;

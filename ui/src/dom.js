@@ -108,6 +108,44 @@ export function openSheet(title, build, { onClose } = {}) {
   return close;
 }
 
+/**
+ * A large overlay built once and shown/hidden, so text typed in it survives closing.
+ * Escape or a backdrop click closes it, like a sheet.
+ */
+export function overlay(title) {
+  const body = h('div', { class: 'sheet overlay-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title });
+  const back = h('div', { class: 'backdrop hidden' }, body);
+  let open = false;
+  let prevFocus = null;
+  const close = () => {
+    if (!open) return;
+    open = false;
+    back.classList.add('hidden');
+    sheets.splice(sheets.indexOf(close), 1);
+    if (prevFocus && prevFocus.focus) prevFocus.focus();
+  };
+  back.addEventListener('mousedown', (e) => {
+    if (e.target === back) close();
+  });
+  const content = h('div', { class: 'overlay-body' });
+  body.append(h('div', { class: 'sheet-head' }, h('h2', { text: title }), iconButton('close', 'Close', close, 'icon')), content);
+  document.body.append(back);
+  return {
+    body: content,
+    isOpen: () => open,
+    close,
+    open(focusSel) {
+      if (open) return;
+      open = true;
+      prevFocus = document.activeElement;
+      back.classList.remove('hidden');
+      sheets.push(close);
+      const f = focusSel ? body.querySelector(focusSel) : null;
+      if (f) f.focus();
+    },
+  };
+}
+
 export function anySheetOpen() {
   return sheets.length > 0;
 }

@@ -28,6 +28,7 @@ import { dosesPanel } from './screens/doses.js';
 import plan from './screens/plan.js';
 import history from './screens/history.js';
 import { composite } from './compose.js';
+import { recipesPanel } from './screens/recipes.js';
 
 // Layouts being tried out. "current" is the shipped one until the new one is approved.
 const LAYOUTS = {
@@ -37,7 +38,7 @@ const LAYOUTS = {
     build: () => [
       { ...today, title: 'Log', icon: 'book', mount: (r) => today.mount(r, { strip: true, addPanel: add }) },
       plan,
-      composite({ id: 'kitchen', title: 'Kitchen', icon: 'kitchen', parts: [{ label: 'Shopping', panel: shop }, { label: 'Stock', panel: stock }] }),
+      composite({ id: 'kitchen', title: 'Kitchen', icon: 'kitchen', parts: [{ label: 'Shopping', panel: shop }, { label: 'Stock', panel: stock }, { label: 'Recipes', panel: recipesPanel() }] }),
       composite({ id: 'meds', title: 'Meds', icon: 'meds', mode: 'stack', parts: [{ panel: dosesPanel() }, { label: 'Schedules', panel: meds }] }),
       composite({ id: 'training', title: 'Training', icon: 'run', mode: 'stack', parts: [{ panel: trainingSummaryPanel() }, { panel: trainingPanel() }] }),
       history,
@@ -98,7 +99,8 @@ document.addEventListener('keydown', (e) => {
       openRules();
     } else if (e.key.toLowerCase() === 'n' && !anySheetOpen()) {
       e.preventDefault();
-      show(screens.some((x) => x.id === 'add') ? 'add' : 'today').then(() => document.getElementById('describe')?.focus());
+      if (screens.some((x) => x.id === 'add')) show('add').then(() => document.getElementById('describe')?.focus());
+      else show('today').then(() => today.openAdd());
     }
     return;
   }

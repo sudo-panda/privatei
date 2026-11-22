@@ -10,10 +10,10 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
 
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 /// Synced tables, in export order. `local` is never synced or exported.
-pub const TABLES: [&str; 10] = ["log", "plan", "stock", "list", "meds", "medlog", "workouts", "foods", "rules", "settings"];
+pub const TABLES: [&str; 11] = ["log", "plan", "stock", "list", "meds", "medlog", "workouts", "foods", "recipes", "rules", "settings"];
 
 #[derive(Debug, Clone)]
 pub struct Rec<T> {
@@ -58,6 +58,7 @@ pub struct Store {
     pub foods: Table<Food>,
     pub rules: Table<Rules>,
     pub settings: Table<Settings>,
+    pub recipes: Table<Recipe>,
     pub local: Table<AiSettings>,
 }
 
@@ -84,6 +85,7 @@ doc!(Workout, "workouts", workouts);
 doc!(Food, "foods", foods);
 doc!(Rules, "rules", rules);
 doc!(Settings, "settings", settings);
+doc!(Recipe, "recipes", recipes);
 doc!(AiSettings, "local", local);
 
 pub type Result<T> = std::result::Result<T, String>;
@@ -122,6 +124,7 @@ impl Store {
             foods: Table::new(),
             rules: Table::new(),
             settings: Table::new(),
+            recipes: Table::new(),
             local: Table::new(),
         };
         s.load::<Log>()?;
@@ -134,6 +137,7 @@ impl Store {
         s.load::<Food>()?;
         s.load::<Rules>()?;
         s.load::<Settings>()?;
+        s.load::<Recipe>()?;
         s.load::<AiSettings>()?;
         Ok(s)
     }
@@ -257,6 +261,7 @@ impl Store {
         self.load::<Food>()?;
         self.load::<Rules>()?;
         self.load::<Settings>()?;
+        self.load::<Recipe>()?;
         self.load::<AiSettings>()
     }
 
@@ -287,6 +292,7 @@ impl Store {
         add::<Food>(self, ts, &mut out);
         add::<Rules>(self, ts, &mut out);
         add::<Settings>(self, ts, &mut out);
+        add::<Recipe>(self, ts, &mut out);
         out.sort_by_key(|c| c.updated_at);
         out
     }
@@ -310,19 +316,28 @@ impl Store {
     }
 }
 
+fn create_table(t: &str) -> String {
+    format!(
+        "CREATE TABLE IF NOT EXISTS \"{t}\" (id TEXT PRIMARY KEY, updated_at INTEGER NOT NULL,
+         deleted INTEGER NOT NULL DEFAULT 0, device TEXT, data TEXT NOT NULL);
+         CREATE INDEX IF NOT EXISTS \"{t}_updated\" ON \"{t}\"(updated_at);"
+    )
+}
+
 fn migrate(conn: &Connection) -> Result<()> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).map_err(err)?;
     if version < 1 {
         let mut sql = String::from("BEGIN;");
         for t in TABLES.iter().chain(std::iter::once(&"local")) {
-            sql.push_str(&format!(
-                "CREATE TABLE IF NOT EXISTS \"{t}\" (id TEXT PRIMARY KEY, updated_at INTEGER NOT NULL,
-                 deleted INTEGER NOT NULL DEFAULT 0, device TEXT, data TEXT NOT NULL);
-                 CREATE INDEX IF NOT EXISTS \"{t}_updated\" ON \"{t}\"(updated_at);"
-            ));
+            sql.push_str(&create_table(t));
         }
-        sql.push_str("PRAGMA user_version = 1; COMMIT;");
+        sql.push_str("PRAGMA user_version = 2; COMMIT;");
         conn.execute_batch(&sql).map_err(err)?;
+        return Ok(());
+    }
+    if version < 2 {
+        // v2: recipes
+        conn.execute_batch(&format!("BEGIN; {} PRAGMA user_version = 2; COMMIT;", create_table("recipes"))).map_err(err)?;
     }
     if version > SCHEMA_VERSION {
         return Err(format!("This database was made by a newer Private-I (schema {version})."));
@@ -417,6 +432,34 @@ mod tests {
         assert_eq!(s.skipped, 2);
         assert_eq!(s.all::<Log>().count(), 1);
         assert!(s.get::<Log>("good").is_some());
+    }
+
+    #[test]
+    fn migrates_v1_to_v2() {
+        let path = tmp("migrate");
+        {
+            // A version-1 database without the recipes table.
+            let c = Connection::open(&path).unwrap();
+            for t in ["log", "plan", "stock", "list", "meds", "medlog", "workouts", "foods", "rules", "settings", "local"] {
+                c.execute_batch(&create_table(t)).unwrap();
+            }
+            c.execute_batch("PRAGMA user_version = 1;").unwrap();
+            c.execute(
+                "INSERT INTO log (id, updated_at, deleted, device, data) VALUES ('a', 1, 0, 'd', '{\"name\":\"Egg\",\"kcal\":79}')",
+                [],
+            )
+            .unwrap();
+        }
+        let mut s = Store::open(&path, "d").unwrap();
+        assert_eq!(s.get::<Log>("a").unwrap().name, "Egg", "old data kept");
+        s.put("r", Recipe { name: "Dal".into(), servings: 4.0, ..Default::default() }).unwrap();
+        let v: i64 = s.conn().query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, 2);
+        drop(s);
+        assert_eq!(Store::open(&path, "d").unwrap().get::<Recipe>("r").unwrap().name, "Dal");
+        // A database from a newer app is refused rather than damaged.
+        Connection::open(&path).unwrap().execute_batch("PRAGMA user_version = 99;").unwrap();
+        assert!(Store::open(&path, "d").is_err());
     }
 
     #[test]

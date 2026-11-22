@@ -1,4 +1,4 @@
-import { h, fill, icon, iconButton, toast, openSheet, n0, n1, dayLabel, chipGroup } from '../dom.js';
+import { h, fill, icon, iconButton, toast, openSheet, overlay, n0, n1, dayLabel, chipGroup } from '../dom.js';
 import { call, quiet, message } from '../api.js';
 import { state, go, changed } from '../state.js';
 
@@ -27,8 +27,16 @@ function mount(root, o = {}) {
   els.food = h('div', { class: 'card', 'aria-label': 'Food logged' });
   els.meds = h('div', { class: 'card hidden', 'aria-label': 'Medicines' });
   els.training = h('div', { class: 'card', 'aria-label': 'Training' });
-  root.append(h('div', { class: 'cols' }, h('div', { class: 'col' }, els.strip, els.nav, els.energy, els.plan, els.meds), h('div', { class: 'col' }, els.addSlot, els.food, els.training)));
-  if (opts.addPanel) opts.addPanel.mount(els.addSlot, { compact: true });
+  root.append(h('div', { class: 'cols' }, h('div', { class: 'col' }, els.strip, els.nav, els.energy, els.plan, els.meds), h('div', { class: 'col' }, els.food, els.training)));
+  if (opts.addPanel) {
+    // Adding food happens in an overlay, so the Log stays a clean record of the day.
+    els.addOverlay = overlay('Add food');
+    opts.addPanel.mount(els.addOverlay.body, { compact: true, onLogged: () => els.addOverlay.close() });
+  }
+}
+
+export function openAdd() {
+  if (els.addOverlay) els.addOverlay.open('#food-search');
 }
 
 async function refresh(o = {}) {
@@ -148,27 +156,44 @@ function render() {
     ),
   );
 
-  // Food
+  // Food: a table — name and amount on the left, aligned kcal / protein / fiber columns.
+  const split = (name) => {
+    const i = name.lastIndexOf(' · ');
+    return i > 0 ? [name.slice(0, i), name.slice(i + 3)] : [name, ''];
+  };
+  const cell = (v, cls = '') => h('span', { class: `fc num ${cls}`, text: v });
+  const fx = (x) => (Math.round((Number(x) || 0) * 10) / 10).toFixed(1); // always one decimal so columns line up
   const groups = d.meals.map((g) =>
     h(
       'div',
-      { class: 'list', 'data-meal': g.meal },
-      h('div', { class: 'row spread', style: 'padding-top:6px' }, h('h3', { text: g.meal }), h('span', { class: 'num small muted', text: `${n0(g.kcal)} kcal · ${n1(g.prot)} g` })),
-      g.rows.map((r) =>
-        h(
+      { class: 'food-group', 'data-meal': g.meal },
+      h('div', { class: 'food-row food-head' }, h('span', { class: 'fn', text: g.meal }), cell(n0(g.kcal)), cell(fx(g.prot)), cell('')),
+      g.rows.map((r) => {
+        const [name, amount] = split(r.name);
+        return h(
           'button',
-          { type: 'button', class: 'item ghost row-edit', 'data-log': r.id, 'aria-label': `Edit ${r.name}`, onclick: () => openFoodEditor(r) },
-          h('span', { class: 'name' }, h('div', { text: r.name }), r.est ? h('div', { class: 'meta', text: 'estimated weight' }) : null),
-          h('span', { class: 'num small', text: `${n0(r.kcal)} · ${n1(r.prot)} g` }),
-          h('span', { class: 'edit-hint', 'aria-hidden': 'true', text: 'Edit' }),
-        ),
-      ),
+          { type: 'button', class: 'food-row row-edit', 'data-log': r.id, 'aria-label': `Edit ${r.name}`, onclick: () => openFoodEditor(r) },
+          h('span', { class: 'fn' },
+            h('span', { class: 'fname', text: name }),
+            h('span', { class: 'famount', text: [amount, r.est ? 'estimated' : null, r.fromPlan ? 'from plan' : null].filter(Boolean).join(' · ') })),
+          cell(n0(r.kcal)),
+          cell(fx(r.prot)),
+          cell(r.fiber == null ? '–' : fx(r.fiber), 'muted'),
+        );
+      }),
     ),
   );
+  const head = groups.length
+    ? h('div', { class: 'food-row food-cols', 'aria-hidden': 'true' }, h('span', { class: 'fn' }), cell('kcal'), cell('protein'), cell('fiber'))
+    : null;
   fill(
     els.food,
-    h('div', { class: 'card-head' }, h('h2', { text: 'Food' }), opts.addPanel ? null : h('button', { type: 'button', class: 'ghost', onclick: () => go('add') }, icon('add'), 'Add food')),
-    groups.length ? groups : h('p', { class: 'muted', text: 'Nothing logged yet.' }),
+    h('div', { class: 'card-head' },
+      h('h2', { text: 'Food' }),
+      opts.addPanel
+        ? h('button', { type: 'button', class: 'primary', id: 'open-add', onclick: openAdd }, icon('add'), 'Add food')
+        : h('button', { type: 'button', class: 'ghost', onclick: () => go('add') }, icon('add'), 'Add food')),
+    groups.length ? h('div', { class: 'food-table' }, head, groups) : h('p', { class: 'muted', text: 'Nothing logged yet.' }),
     d.canCopyYesterday
       ? h('button', {
           type: 'button',
@@ -360,4 +385,4 @@ export function openFoodEditor(r) {
   });
 }
 
-export default { id: 'today', title: 'Today', icon: 'today', mount, refresh, setDate, get els() { return els; } };
+export default { id: 'today', title: 'Today', icon: 'today', mount, refresh, setDate, openAdd, get els() { return els; } };

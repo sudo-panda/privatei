@@ -257,6 +257,44 @@ pub struct Food {
     pub ts: i64,
 }
 
+/// One ingredient of a recipe, with its nutrition captured when it was added,
+/// so a recipe keeps working even if a food database is removed.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Ingredient {
+    #[serde(deserialize_with = "lenient::string")]
+    pub name: String,
+    #[serde(deserialize_with = "lenient::opt_string", skip_serializing_if = "Option::is_none")]
+    pub food_ref: Option<String>,
+    #[serde(deserialize_with = "lenient::f64")]
+    pub grams: f64,
+    #[serde(deserialize_with = "lenient::f64")]
+    pub kcal: f64,
+    #[serde(deserialize_with = "lenient::f64")]
+    pub prot: f64,
+    #[serde(deserialize_with = "lenient::opt_f64", skip_serializing_if = "Option::is_none")]
+    pub fiber: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nut: Option<Nut>,
+}
+
+/// A dish made from ingredients (dal, a bowl you make often…).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Recipe {
+    #[serde(deserialize_with = "lenient::string")]
+    pub name: String,
+    /// How many portions the whole recipe makes.
+    #[serde(deserialize_with = "lenient::f64")]
+    pub servings: f64,
+    /// Weight of the finished dish (after cooking), if weighed. Otherwise the raw total.
+    #[serde(deserialize_with = "lenient::opt_f64", skip_serializing_if = "Option::is_none")]
+    pub cooked_grams: Option<f64>,
+    pub ingredients: Vec<Ingredient>,
+    #[serde(deserialize_with = "lenient::string")]
+    pub note: String,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Rules {

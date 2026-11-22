@@ -38,6 +38,7 @@ pub fn export(store: &Store, now_ms: i64) -> Value {
     c.insert("medlog".into(), collection::<MedLog>(store));
     c.insert("workouts".into(), collection::<Workout>(store));
     c.insert("foods".into(), collection::<Food>(store));
+    c.insert("recipes".into(), collection::<Recipe>(store));
     c.insert("rules".into(), collection::<Rules>(store));
     c.insert("settings".into(), collection::<Settings>(store));
     debug_assert_eq!(c.len(), TABLES.len());
@@ -91,6 +92,7 @@ pub fn import(store: &mut Store, text: &str) -> Result<usize, String> {
                 "medlog" => import_coll::<MedLog>(s, docs, None)?,
                 "workouts" => import_coll::<Workout>(s, docs, None)?,
                 "foods" => import_coll::<Food>(s, docs, None)?,
+                "recipes" => import_coll::<Recipe>(s, docs, None)?,
                 "rules" => import_coll::<Rules>(s, docs, Some("house"))?,
                 "settings" => {
                     let ids: Vec<String> = s.all::<Settings>().map(|(k, _)| k.clone()).filter(|k| k != "main").collect();

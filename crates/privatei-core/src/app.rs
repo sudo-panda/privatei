@@ -397,6 +397,58 @@ fn nut_views(sum: &Nut, known: &BTreeMap<String, usize>, total: usize, fiber_ref
         .collect()
 }
 
+/// All nutrients of a recipe (sum of ingredients), including fiber.
+fn recipe_nut(r: &Recipe) -> Nut {
+    let mut n = Nut::new();
+    for i in &r.ingredients {
+        if let Some(m) = &i.nut {
+            nutrients::add(&mut n, m);
+        }
+        if let Some(f) = i.fiber {
+            *n.entry("fiber".into()).or_default() += f;
+        }
+    }
+    n
+}
+
+fn recipe_view(id: &str, r: &Recipe) -> RecipeView {
+    let raw: f64 = r.ingredients.iter().map(|i| i.grams).sum();
+    let grams = r.cooked_grams.unwrap_or(raw);
+    let kcal: f64 = r.ingredients.iter().map(|i| i.kcal).sum();
+    let prot: f64 = r.ingredients.iter().map(|i| i.prot).sum();
+    let fiber = r.ingredients.iter().any(|i| i.fiber.is_some()).then(|| r.ingredients.iter().filter_map(|i| i.fiber).sum::<f64>());
+    let s = r.servings.max(1e-9);
+    // A nutrient counts as known only if every ingredient has it (otherwise the sum understates it).
+    let known = nutrients::CATALOG
+        .iter()
+        .filter(|d| {
+            r.ingredients.iter().all(|i| {
+                if d.key == "fiber" {
+                    i.fiber.is_some()
+                } else {
+                    i.nut.as_ref().is_some_and(|n| n.contains_key(d.key))
+                }
+            })
+        })
+        .count();
+    RecipeView {
+        id: id.into(),
+        name: r.name.clone(),
+        servings: r.servings,
+        cooked_grams: r.cooked_grams,
+        note: r.note.clone(),
+        ingredients: r.ingredients.clone(),
+        total: Amounts { grams: grams.round(), kcal: kcal.round(), prot: round1(prot), fiber: fiber.map(round1) },
+        per_serving: Amounts {
+            grams: (grams / s).round(),
+            kcal: (kcal / s).round(),
+            prot: round1(prot / s),
+            fiber: fiber.map(|f| round1(f / s)),
+        },
+        known,
+    }
+}
+
 /// A log row's nutrients including fiber.
 fn row_nut(l: &Log) -> Nut {
     let mut n = l.nut.clone().unwrap_or_default();
@@ -508,6 +560,43 @@ pub struct PlanAhead {
     pub avg_prot: f64,
     /// The newest planned day before today, if any (for "copy last week").
     pub has_earlier: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Amounts {
+    pub grams: f64,
+    pub kcal: f64,
+    pub prot: f64,
+    pub fiber: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecipeView {
+    pub id: String,
+    pub name: String,
+    pub servings: f64,
+    pub cooked_grams: Option<f64>,
+    pub note: String,
+    pub ingredients: Vec<Ingredient>,
+    pub total: Amounts,
+    pub per_serving: Amounts,
+    /// How many catalog nutrients every ingredient has a value for.
+    pub known: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecipeInput {
+    pub name: String,
+    pub servings: f64,
+    #[serde(default)]
+    pub cooked_grams: Option<f64>,
+    #[serde(default)]
+    pub ingredients: Vec<Ingredient>,
+    #[serde(default)]
+    pub note: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1163,6 +1252,40 @@ impl Core {
                 let f = self.store.get::<Food>(key)?;
                 (f.name.clone(), f.kcal100, f.prot100, f.piece, f.fiber100, f.nut100.clone().unwrap_or_default(), "Learned foods")
             }
+            "recipe" => {
+                let r = self.store.get::<Recipe>(key)?;
+                let v = recipe_view(key, r);
+                let w = v.total.grams;
+                if w <= 0.0 {
+                    return None;
+                }
+                let k = 100.0 / w;
+                let mut nut = recipe_nut(r);
+                nut.remove("fiber");
+                return Some(DbFood {
+                    reference: reference.to_string(),
+                    name: r.name.clone(),
+                    source: "recipe".into(),
+                    source_name: "My recipes".into(),
+                    category: format!("{} serving{}", food::fmt_num(r.servings), if r.servings == 1.0 { "" } else { "s" }),
+                    // Keep precision per 100 g so a serving adds back up exactly.
+                    kcal100: (v.total.kcal * k * 1000.0).round() / 1000.0,
+                    prot100: (v.total.prot * k * 1000.0).round() / 1000.0,
+                    fiber100: v.total.fiber.map(|f| (f * k * 1000.0).round() / 1000.0),
+                    known: v.known,
+                    nut100: {
+                        let mut n = nutrients::scale(&nut, k);
+                        if let Some(f) = v.total.fiber {
+                            n.insert("fiber".into(), (f * k * 1000.0).round() / 1000.0);
+                        }
+                        n
+                    },
+                    portions: vec![
+                        Portion { label: "1 serving".into(), grams: v.per_serving.grams },
+                        Portion { label: "whole recipe".into(), grams: w },
+                    ],
+                });
+            }
             _ => return None,
         };
         let mut nut100 = nut;
@@ -1197,6 +1320,11 @@ impl Core {
             q.iter().all(|w| words.iter().any(|n| n.starts_with(w.as_str())))
         };
         let mut out: Vec<crate::fooddb::DbFood> = vec![];
+        for (id, r) in self.store.all::<Recipe>() {
+            if hit(&r.name) {
+                out.extend(self.builtin_food(&format!("recipe:{id}")));
+            }
+        }
         for (id, f) in self.store.all::<Food>() {
             if hit(&f.name) {
                 out.extend(self.builtin_food(&format!("mine:{id}")));
@@ -1207,7 +1335,7 @@ impl Core {
                 out.extend(self.builtin_food(&format!("table:{n}")));
             }
         }
-        out.truncate(4);
+        out.truncate(6);
         if let Some(db) = &self.foods {
             out.extend(db.search(query, limit));
         }
@@ -1217,6 +1345,84 @@ impl Core {
 
     pub fn food_detail(&self, reference: &str) -> Option<crate::fooddb::DbFood> {
         self.builtin_food(reference).or_else(|| self.foods.as_ref()?.get(reference))
+    }
+
+    // ---------- Recipes ----------
+
+    /// An ingredient from any food source, with its nutrition for `grams`.
+    pub fn ingredient(&self, reference: &str, grams: f64) -> Result<Ingredient> {
+        if !(grams > 0.0 && grams <= 20000.0) {
+            return Err("Grams must be between 1 and 20000.".into());
+        }
+        let f = self.food_detail(reference).ok_or("That food isn't in your databases any more.")?;
+        let k = grams / 100.0;
+        let mut nut = nutrients::scale(&f.nut100, k);
+        let fiber = nut.remove("fiber");
+        Ok(Ingredient {
+            name: f.name,
+            food_ref: Some(f.reference),
+            grams: grams.round(),
+            kcal: (f.kcal100 * k).round(),
+            prot: round1(f.prot100 * k),
+            fiber,
+            nut: (!nut.is_empty()).then_some(nut),
+        })
+    }
+
+    fn clean_recipe(input: RecipeInput) -> Result<Recipe> {
+        let name = ai::clip(&input.name, 80);
+        if name.is_empty() {
+            return Err("Give the recipe a name.".into());
+        }
+        if !(input.servings > 0.0 && input.servings <= 100.0) {
+            return Err("Servings must be between 1 and 100.".into());
+        }
+        if input.ingredients.is_empty() {
+            return Err("Add at least one ingredient.".into());
+        }
+        let cooked = input.cooked_grams.filter(|g| *g > 0.0 && g.is_finite());
+        if cooked.is_some_and(|g| g > 50000.0) {
+            return Err("The cooked weight looks too large.".into());
+        }
+        let ingredients = input
+            .ingredients
+            .into_iter()
+            .take(60)
+            .map(|i| Ingredient {
+                name: ai::clip(&i.name, 80),
+                food_ref: i.food_ref,
+                grams: i.grams.clamp(0.0, 20000.0),
+                kcal: i.kcal.clamp(0.0, 50000.0).round(),
+                prot: round1(i.prot.clamp(0.0, 5000.0)),
+                fiber: i.fiber.filter(|f| f.is_finite() && *f >= 0.0),
+                nut: i.nut.as_ref().map(nutrients::clean).filter(|n| !n.is_empty()),
+            })
+            .filter(|i| !i.name.is_empty())
+            .collect();
+        Ok(Recipe { name, servings: input.servings, cooked_grams: cooked, ingredients, note: ai::clip(&input.note, 500) })
+    }
+
+    /// Totals for a recipe being edited, without saving it.
+    pub fn recipe_preview(&self, input: RecipeInput) -> Result<RecipeView> {
+        let r = Self::clean_recipe(input)?;
+        Ok(recipe_view("", &r))
+    }
+
+    pub fn save_recipe(&mut self, id: Option<String>, input: RecipeInput) -> Result<String> {
+        let r = Self::clean_recipe(input)?;
+        let id = id.filter(|i| !i.is_empty()).unwrap_or_else(new_id);
+        self.store.put(&id, r)?;
+        Ok(id)
+    }
+
+    pub fn recipes(&self) -> Vec<RecipeView> {
+        let mut v: Vec<RecipeView> = self.store.all::<Recipe>().map(|(id, r)| recipe_view(id, r)).collect();
+        v.sort_by_key(|r| r.name.to_lowercase());
+        v
+    }
+
+    pub fn delete_recipe(&mut self, id: &str) -> Result<()> {
+        self.store.delete::<Recipe>(id).map(|_| ())
     }
 
     pub fn food_sources(&self) -> Vec<crate::fooddb::SourceInfo> {

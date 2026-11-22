@@ -15,6 +15,7 @@ function guessMeal() {
 
 function mount(root, o = {}) {
   els.compact = !!o.compact;
+  els.onLogged = o.onLogged || (() => {});
   els.target = h('div', { class: 'small muted', 'data-testid': 'log-target' });
   els.recent = h('div', { class: 'chips', 'aria-label': 'Recent foods' });
   const recentCard = h('div', { class: 'card' }, h('div', { class: 'row spread' }, h('h3', { text: 'Recent' }), els.target), els.recent);
@@ -84,6 +85,7 @@ function mount(root, o = {}) {
       }
       toast(`Logged ${f.name}`);
       changed();
+      els.onLogged();
     },
   });
   if (o.compact) {
@@ -166,6 +168,7 @@ function renderDraft() {
           setDraft(null);
           document.getElementById('describe').value = '';
           changed();
+          els.onLogged();
         },
       }, 'Save'),
     ),
@@ -223,6 +226,7 @@ function manualCard() {
       edited = { kcal: false, prot: false };
       hint.textContent = '';
       changed();
+      els.onLogged();
     },
   }, 'Log it');
   els.names = list;
@@ -256,6 +260,7 @@ async function refresh(opts = {}) {
               await call('add_log', { date: state.date, entry: { meal: '', name: r.name, grams: r.grams, kcal: r.kcal, prot: r.prot, est: r.est } });
               toast(`Logged ${r.name}`);
               changed();
+              els.onLogged();
             },
           }, h('span', { text: r.name })),
         )

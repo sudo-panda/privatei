@@ -465,6 +465,9 @@ test('New layout: plan board, edit sheets, charts and insights', async ({ page }
 test('Food database: search, pick a portion, log it; Swiss download; nutrients in History', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await open(page, 'seed=demo&layout=new&hhmm=12:00');
+  await expect(page.locator('#food-search')).toBeHidden(); // adding food lives in an overlay
+  await page.locator('#open-add').click();
+  await expect(page.locator('#food-search')).toBeFocused();
   await page.locator('#food-search').fill('lentils');
   const first = page.locator('.food-hit').first();
   await expect(first).toContainText('Lentils');
@@ -475,15 +478,18 @@ test('Food database: search, pick a portion, log it; Swiss download; nutrients i
   await page.getByRole('button', { name: 'Lunch', exact: true }).click();
   await page.getByRole('button', { name: 'Add to log' }).click();
   await expect(page.locator('.toast').last()).toContainText('Logged Lentils');
+  await expect(page.locator('#food-search')).toBeHidden(); // the overlay closes after logging
   await expect(page.locator('[data-meal="Lunch"]')).toContainText('Lentils');
   // Built-in foods come first for words they know (skyr isn't in USDA).
+  await page.keyboard.press('ControlOrMeta+n');
   await page.locator('#food-search').fill('skyr');
   await expect(page.locator('.food-hit').first()).toContainText('Built-in');
+  await page.keyboard.press('Escape');
   // Plan editor: search fills the meal
   await tab(page, 'plan').click();
   await page.locator('.plan-day').first().getByLabel(/Add dinner on Today/).click();
   await page.locator('#plan-food').fill('chickpeas');
-  await page.locator('.sheet .food-hit').first().click();
+  await page.locator('.sheet:visible .food-hit').first().click();
   await page.locator('#plan-food-grams').fill('200');
   await page.getByRole('button', { name: 'Use this' }).click();
   await expect(page.locator('#pm-name')).toHaveValue(/Chickpeas.*200 g/);
@@ -497,11 +503,46 @@ test('Food database: search, pick a portion, log it; Swiss download; nutrients i
   await expect(page.locator('#foods-status')).toHaveText('Added 1,216 foods.');
   await expect(page.locator('[data-source="swiss"]')).toBeVisible();
   await tab(page, 'today').click();
+  await page.locator('#open-add').click();
   await page.locator('#food-search').fill('rosti');
   await expect(page.locator('.food-hit').first()).toContainText('Swiss');
   // History lists every nutrient it knows about, grouped
+  await page.keyboard.press('Escape');
   await tab(page, 'history').click();
   const nut = page.locator('.card[aria-label="Nutrients"]');
   await expect(nut.locator('.nut-group h3', { hasText: 'Minerals' })).toBeVisible();
   await expect(nut.locator('.pct-row', { hasText: 'Folate' })).toBeVisible();
+});
+
+test('Recipes: build from ingredients, then log a serving from search', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&hhmm=19:00');
+  await tab(page, 'kitchen').click();
+  await page.locator('[data-part="Recipes"]').click();
+  await page.getByRole('button', { name: 'New recipe' }).click();
+  await page.locator('#rc-name').fill('Masoor dal');
+  await page.locator('#rc-servings').fill('4');
+  await page.locator('#rc-cooked').fill('1200');
+  for (const [q, g] of [['lentils', '400'], ['onions', '150']]) {
+    await page.locator('#rc-food').fill(q);
+    await page.locator('.sheet:visible .food-hit').first().click();
+    await page.locator('#rc-food-grams').fill(g);
+    await page.getByRole('button', { name: 'Add ingredient' }).click();
+  }
+  await expect(page.locator('#rc-ingredients .item')).toHaveCount(2);
+  await expect(page.getByTestId('recipe-totals')).toContainText('per serving'.replace('per', 'Per'));
+  await expect(page.getByTestId('recipe-totals')).toContainText('(300 g)');
+  await page.getByRole('button', { name: 'Save recipe' }).click();
+  await expect(page.locator('.recipe-card')).toContainText('Masoor dal');
+  // Log one serving from the Log's search
+  await tab(page, 'today').click();
+  await page.locator('#open-add').click();
+  await page.locator('#food-search').fill('masoor');
+  const hit = page.locator('.food-hit').first();
+  await expect(hit).toContainText('My recipes');
+  await hit.click();
+  await page.locator('.food-picked .chip', { hasText: '1 serving' }).click();
+  await expect(page.locator('#food-search-grams')).toHaveValue('300');
+  await page.getByRole('button', { name: 'Add to log' }).click();
+  await expect(page.locator('[data-meal="Dinner"]')).toContainText('Masoor dal');
 });
