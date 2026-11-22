@@ -72,7 +72,7 @@ function mount(root, o = {}) {
 
   els.draft = h('div', { class: 'card hidden', id: 'draft', 'aria-label': 'Draft' });
 
-  const search = foodSearch({
+  const search = (els.search = foodSearch({
     id: 'food-search',
     meal: guessMeal(),
     confirmLabel: 'Add to log',
@@ -87,7 +87,7 @@ function mount(root, o = {}) {
       changed();
       els.onLogged();
     },
-  });
+  }));
   if (o.compact) {
     // Inline on a day: one "Add food" card; typing numbers by hand is tucked away.
     const manual = manualCard();
@@ -142,6 +142,9 @@ function renderDraft() {
               { class: 'item', 'data-draft': i },
               h('span', { class: 'name' }, h('div', { text: it.name }), h('div', { class: 'meta', text: `${it.meal}${it.est ? ' · estimated weight' : ''}` })),
               h('span', { class: 'num small', text: `${n0(it.kcal)} · ${n1(it.prot)} g` }),
+              draft.provider
+                ? h('button', { type: 'button', class: 'ghost small-btn', 'aria-label': `Find ${it.name} as a packaged product`, title: 'Look it up on Open Food Facts', onclick: () => els.search.searchOnline(it.name.split(' · ')[0]) }, 'Packaged?')
+                : null,
               iconButton('close', `Remove ${it.name}`, () => {
                 draft.items.splice(i, 1);
                 renderDraft();
@@ -150,7 +153,11 @@ function renderDraft() {
           ),
         )
       : h('p', { class: 'muted', text: 'Nothing placed yet.' }),
-    draft.unknown.length ? h('p', { class: 'small', 'data-testid': 'unknown' }, h('b', { text: "Couldn't place: " }), draft.unknown.join(', ')) : null,
+    draft.unknown.length
+      ? h('div', { class: 'small', 'data-testid': 'unknown' }, h('b', { text: "Couldn't place: " }), draft.unknown.join(', '),
+          h('div', { class: 'chips', style: 'margin-top:6px' }, draft.unknown.map((u) =>
+            h('button', { type: 'button', class: 'chip', 'aria-label': `Find ${u} as a packaged product`, onclick: () => els.search.searchOnline(u) }, h('span', { text: `Find “${u}” as a packaged product` })))))
+      : null,
     draft.error ? h('p', { class: 'small error', text: draft.error }) : null,
     draft.note ? h('p', { class: 'small muted', text: draft.note }) : null,
     h('div', { class: 'row spread' }, h('b', { text: 'Total' }), h('span', { class: 'num', 'data-testid': 'draft-total', text: `${n0(total[0])} kcal · ${n1(total[1])} g protein` })),

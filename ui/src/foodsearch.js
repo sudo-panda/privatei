@@ -104,5 +104,16 @@ export function foodSearch(opts) {
     results.classList.add('hidden');
   }
 
-  return h('div', { class: 'food-search' }, input, results, picked);
+  const el = h('div', { class: 'food-search' }, input, results, picked);
+  /** Run an Open Food Facts lookup for `q` straight away (from the draft's "Find as packaged product"). */
+  el.searchOnline = (q) => {
+    input.value = q;
+    picked.classList.add('hidden');
+    results.classList.remove('hidden');
+    const row = onlineButton(q);
+    fill(results, row);
+    row.querySelector('button').click();
+    input.scrollIntoView({ block: 'nearest' });
+  };
+  return el;
 }

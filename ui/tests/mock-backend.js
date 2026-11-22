@@ -281,11 +281,22 @@ function place(part) {
 
 function estimate({ text }) {
   if (!text.trim()) throw 'Describe what you ate first.';
-  const parts = text.split(/[,;+\n]|\band\b|\bwith\b|\bund\b|\bmit\b/i).map((s) => s.trim()).filter(Boolean);
   const items = [], unknown = [];
-  for (const p of parts) {
-    const it = place(p);
-    it ? items.push(it) : unknown.push(p);
+  const hasAmount = (p) => /\d|\b(a|an|one|two|half|ein|zwei)\b/i.test(p) || /^(some|bowl|plate|cup|glass|handful|portion|serving|piece|slice|bit|little|few|etwas)\b/i.test(p);
+  for (const chunk of text.split(/[,;+\n]/)) {
+    const bits = chunk.split(/\b(and|with|und|mit)\b/i).map((x) => x.trim()).filter(Boolean);
+    const groups = [];
+    for (let i = 0; i < bits.length; i++) {
+      if (/^(and|with|und|mit)$/i.test(bits[i])) continue;
+      const conn = i > 0 ? bits[i - 1] : '';
+      if (!groups.length || hasAmount(bits[i])) groups.push([bits[i]]);
+      else groups[groups.length - 1].push(`${conn} ${bits[i]}`);
+    }
+    for (const g of groups) {
+      const placed = g.map((p) => place(p.replace(/^(and|with|und|mit)\s+/i, '')));
+      if (placed.every(Boolean)) items.push(...placed);
+      else unknown.push(g.join(' '));
+    }
   }
   const v = { items, unknown, note: '', provider: null, providerText: null, error: null, meal: guess(HHMM) };
   if (unknown.length) {

@@ -423,27 +423,107 @@ pub fn split_parts(text: &str) -> Vec<String> {
 }
 
 /// Estimate everything the food tables can place; return the rest as unknown.
+/// Does a phrase carry its own amount ("200g", "2", "a", "1 tbsp")?
+fn has_amount(part: &str) -> bool {
+    let a = parse_amount(part);
+    let first = part.split_whitespace().next().unwrap_or("").to_lowercase();
+    a.grams.is_some()
+        || a.count.is_some()
+        || matches!(
+            first.as_str(),
+            "some"
+                | "bowl"
+                | "plate"
+                | "cup"
+                | "glass"
+                | "handful"
+                | "portion"
+                | "serving"
+                | "piece"
+                | "slice"
+                | "bit"
+                | "little"
+                | "few"
+                | "etwas"
+                | "teller"
+                | "schale"
+                | "glas"
+        )
+}
+
+/// Split a description into dishes. Commas, semicolons, "+" and new lines always
+/// separate. "with/and/mit/und" separate only when the next part has its own amount;
+/// otherwise it's a topping or side of the dish before it ("pizza with mushroom and ham").
+pub fn split_dishes(text: &str) -> Vec<Vec<String>> {
+    let mut out: Vec<Vec<String>> = vec![];
+    for chunk in text.split([',', ';', '+', '\n']) {
+        let mut parts: Vec<(String, String)> = vec![]; // (connector before, words)
+        let mut cur: Vec<&str> = vec![];
+        let mut conn = String::new();
+        for w in chunk.split_whitespace() {
+            if matches!(w.to_lowercase().as_str(), "and" | "with" | "und" | "mit" | "&") {
+                if !cur.is_empty() {
+                    parts.push((conn.clone(), cur.join(" ")));
+                }
+                conn = w.to_string();
+                cur.clear();
+            } else {
+                cur.push(w);
+            }
+        }
+        if !cur.is_empty() {
+            parts.push((conn, cur.join(" ")));
+        }
+        let mut group: Vec<String> = vec![];
+        for (i, (c, p)) in parts.into_iter().enumerate() {
+            if i > 0 && has_amount(&p) {
+                out.push(std::mem::take(&mut group));
+            }
+            group.push(if group.is_empty() { p } else { format!("{c} {p}") });
+        }
+        if !group.is_empty() {
+            out.push(group);
+        }
+    }
+    out.into_iter().filter(|g| !g.is_empty()).collect()
+}
+
+/// Estimate everything the food tables can place; return the rest as unknown.
 pub fn local_estimate(text: &str, hhmm: &str, learned: &[Food]) -> LocalEstimate {
     let meal = meal_for_time(hhmm).to_string();
     let mut items = vec![];
     let mut unknown = vec![];
-    for part in split_parts(text) {
-        match place(&part, learned) {
-            Some((f, grams, est)) => {
-                let (kcal, prot) = nutrients(&f, grams);
-                let (fiber, nut) = extras(&f, grams);
-                items.push(Item {
-                    name: format!("{} · {} g", capitalize(&f.name), fmt_num(grams)),
-                    grams: Some(grams),
-                    kcal,
-                    prot,
-                    est,
-                    meal: meal.clone(),
-                    fiber,
-                    nut,
-                });
-            }
-            None => unknown.push(part),
+    let to_item = |f: FoodRef, grams: f64, est: bool| {
+        let (kcal, prot) = nutrients(&f, grams);
+        let (fiber, nut) = extras(&f, grams);
+        Item {
+            name: format!("{} · {} g", capitalize(&f.name), fmt_num(grams)),
+            grams: Some(grams),
+            kcal,
+            prot,
+            est,
+            meal: meal.clone(),
+            fiber,
+            nut,
+        }
+    };
+    for group in split_dishes(text) {
+        // Strip the connector words to place each piece on its own.
+        let pieces: Vec<String> = group
+            .iter()
+            .map(|p| {
+                p.split_whitespace()
+                    .skip_while(|w| matches!(w.to_lowercase().as_str(), "and" | "with" | "und" | "mit" | "&"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .collect();
+        let placed: Vec<Option<(FoodRef, f64, bool)>> = pieces.iter().map(|p| place(p, learned)).collect();
+        if placed.iter().all(Option::is_some) {
+            items.extend(placed.into_iter().flatten().map(|(f, g, e)| to_item(f, g, e)));
+        } else {
+            // A dish with parts we can't place goes to the AI whole, so "with ham" stays on the pizza.
+            unknown.push(group.join(" "));
         }
     }
     LocalEstimate { items, unknown, meal }
@@ -595,6 +675,27 @@ mod tests {
         let e = local_estimate("150 g Skyr mit 40g Haferflocken", "09:00", &[]);
         assert_eq!(e.items.len(), 1);
         assert_eq!(e.unknown, vec!["40g Haferflocken"]);
+    }
+
+    #[test]
+    fn dishes_keep_their_toppings() {
+        let e = local_estimate("1 daemilio pizza with mushroom and ham", "19:00", &[]);
+        assert!(e.items.is_empty());
+        assert_eq!(e.unknown, vec!["1 daemilio pizza with mushroom and ham"]);
+        // "some …", "a bowl of …" count as their own amount, so they're separate foods.
+        assert_eq!(local_estimate("2 eggs and some mystery stew", "12:00", &[]).unknown, vec!["some mystery stew"]);
+        // Parts with their own amounts are still separate foods.
+        assert_eq!(
+            split_dishes("150 g Skyr mit 40g Haferflocken"),
+            vec![vec!["150 g Skyr".to_string()], vec!["40g Haferflocken".to_string()]]
+        );
+        // Both pieces known: still logged as two items.
+        let e = local_estimate("1 banana and apple", "10:00", &[]);
+        assert_eq!(e.items.len(), 2);
+        // Known dish with an unknown side: the whole phrase goes to the AI.
+        let e = local_estimate("2 toast with butter, 1 egg", "08:00", &[]);
+        assert_eq!(e.unknown, vec!["2 toast with butter"]);
+        assert_eq!(e.items.len(), 1);
     }
 
     #[test]

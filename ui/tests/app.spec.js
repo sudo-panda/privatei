@@ -597,3 +597,19 @@ test('Log date bar: scrolls to the selected day, Today pinned and outlined', asy
   // One combined bar: no separate date card.
   await expect(page.locator('#day-label')).toHaveCount(0);
 });
+
+test('A dish with toppings stays one item; find it as a packaged product', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&hhmm=19:00');
+  await page.evaluate(() => (window.__mock.aiAvailable = false));
+  await page.locator('#open-add').click();
+  await page.locator('#describe').fill('1 daemilio pizza with mushroom and ham');
+  await page.getByRole('button', { name: 'Work out the calories' }).click();
+  await expect(page.getByTestId('unknown')).toContainText('1 daemilio pizza with mushroom and ham');
+  await expect(page.locator('[data-draft]')).toHaveCount(0); // not three separate guesses
+  await page.evaluate(() => (window.__mock.aiAvailable = true));
+  await page.getByRole('button', { name: 'Work out the calories' }).click();
+  await expect(page.locator('[data-draft]')).toHaveCount(1);
+  await page.getByLabel(/Find 1 daemilio pizza with mushroom and ham as a packaged product/).click();
+  await expect(page.locator('#food-search')).toHaveValue('1 daemilio pizza with mushroom and ham');
+});
