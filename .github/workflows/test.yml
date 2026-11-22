@@ -2,11 +2,12 @@ name: test
 
 on:
   push:
+    branches: ["**"]
   pull_request:
   workflow_call:
 
 concurrency:
-  group: test-${{ github.ref }}-${{ github.event_name }}
+  group: test-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
