@@ -437,3 +437,7 @@ details > summary::-webkit-details-marker { display: none; }
 .strip-track.more-left { -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade)); mask-image: linear-gradient(to right, transparent, #000 var(--fade)); }
 .strip-track.more-left.more-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); mask-image: linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); }
 .small-btn { min-height: 26px; padding: 2px 8px; font-size: 12px; color: var(--accent); }
+
+/* Add food is always a centred panel, whatever the window width. */
+.overlay-backdrop { align-items: center; padding: 16px; }
+.overlay-sheet { border-radius: 16px; max-height: calc(100vh - 32px); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }

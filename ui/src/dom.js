@@ -114,7 +114,7 @@ export function openSheet(title, build, { onClose } = {}) {
  */
 export function overlay(title) {
   const body = h('div', { class: 'sheet overlay-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title });
-  const back = h('div', { class: 'backdrop hidden' }, body);
+  const back = h('div', { class: 'backdrop overlay-backdrop hidden' }, body);
   let open = false;
   let prevFocus = null;
   const close = () => {

@@ -613,3 +613,15 @@ test('A dish with toppings stays one item; find it as a packaged product', async
   await page.getByLabel(/Find 1 daemilio pizza with mushroom and ham as a packaged product/).click();
   await expect(page.locator('#food-search')).toHaveValue('1 daemilio pizza with mushroom and ham');
 });
+
+test('Add food opens as a centred panel at any width', async ({ page }) => {
+  for (const [w, hgt] of [[1280, 900], [400, 800]]) {
+    await page.setViewportSize({ width: w, height: hgt });
+    await open(page, 'seed=demo&layout=new&hhmm=12:00');
+    await page.locator('#open-add').click();
+    const box = await page.locator('.overlay-sheet').boundingBox();
+    const middle = box.y + box.height / 2;
+    expect(Math.abs(middle - hgt / 2), `vertically centred at ${w}px`).toBeLessThan(hgt * 0.15);
+    expect(box.y, `not stuck to the bottom at ${w}px`).toBeGreaterThan(8);
+  }
+});
