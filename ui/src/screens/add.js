@@ -69,7 +69,7 @@ function mount(root) {
 
   els.draft = h('div', { class: 'card hidden', id: 'draft', 'aria-label': 'Draft' });
 
-  root.append(recentCard, describeCard, els.draft, manualCard());
+  root.append(h('div', { class: 'cols' }, h('div', { class: 'col' }, describeCard, els.draft), h('div', { class: 'col' }, recentCard, manualCard())));
 }
 
 function readAsDataUrl(file) {

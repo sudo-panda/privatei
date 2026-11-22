@@ -19,9 +19,9 @@ function mount(root) {
   els.search = h('input', { type: 'search', id: 'stock-search', placeholder: 'Search stock', 'aria-label': 'Search stock', autocomplete: 'off' });
   els.search.addEventListener('input', render);
   els.banner = h('button', { type: 'button', class: 'banner hidden', id: 'soon-banner', onclick: () => { soonOnly = !soonOnly; render(); } });
-  els.list = h('div', { class: 'screen' });
+  els.list = h('div', { class: 'masonry' });
   root.append(
-    h('div', { class: 'row' }, h('div', { class: 'grow' }, els.search), h('button', { type: 'button', class: 'primary', onclick: () => openEditor(null, '') }, 'Add')),
+    h('div', { class: 'row toolbar' }, h('div', { class: 'grow' }, els.search), h('button', { type: 'button', class: 'primary', onclick: () => openEditor(null, '') }, 'Add')),
     els.banner,
     els.list,
   );

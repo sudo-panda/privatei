@@ -55,27 +55,35 @@ h3 { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacin
 .hidden { display: none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-#app { display: flex; flex-direction: column; height: 100vh; max-width: 720px; margin: 0 auto; }
+/* Narrow (phone) layout first; the desktop layout is in the media query at the end. */
+#app { display: flex; flex-direction: column; height: 100vh; }
+.content { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 header.top {
   display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px 8px; position: sticky; top: 0; background: var(--bg); z-index: 5;
+  padding: 12px 16px 8px; background: var(--bg); z-index: 5;
 }
 header.top h1 { flex: 1; }
+.date-chip { display: none; }
 main { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 12px 24px; }
 .screen { display: flex; flex-direction: column; gap: 12px; }
+.cols, .col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.masonry { display: flex; flex-direction: column; gap: 12px; }
+.toolbar { display: flex; gap: 8px; }
 
 nav.tabs {
-  display: grid; grid-template-columns: repeat(6, 1fr);
+  order: 2; display: grid; grid-template-columns: repeat(6, 1fr);
   border-top: 1px solid var(--line); background: var(--surface);
   padding-bottom: env(safe-area-inset-bottom);
 }
+nav.tabs .brand { display: none; }
 nav.tabs button {
   background: none; border: 0; padding: 8px 2px 10px; color: var(--muted);
   font: 600 12px var(--f-body); display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer;
-  min-width: 0;
+  min-width: 0; border-radius: 0;
 }
 nav.tabs button svg { width: 22px; height: 22px; }
 nav.tabs button[aria-current="page"] { color: var(--accent); }
+nav.tabs kbd { display: none; }
 
 .card {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
@@ -188,3 +196,60 @@ details > summary::-webkit-details-marker { display: none; }
   .grid3 { grid-template-columns: 1fr 1fr; }
   .stats { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ---------- Desktop ---------- */
+@media (min-width: 760px) {
+  body { font-size: 15px; }
+  #app { display: grid; grid-template-columns: 208px minmax(0, 1fr); height: 100vh; }
+  nav.tabs {
+    order: 0; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px;
+    border-top: 0; border-right: 1px solid var(--line); background: var(--surface);
+  }
+  nav.tabs .brand { display: block; font: 700 18px var(--f-head); padding: 6px 12px 16px; color: var(--accent); }
+  nav.tabs button {
+    flex-direction: row; justify-content: flex-start; gap: 12px; padding: 9px 12px; min-height: 38px;
+    font-size: 15px; border-radius: 8px; color: var(--ink);
+  }
+  nav.tabs button svg { width: 19px; height: 19px; color: var(--muted); }
+  nav.tabs button:hover { background: var(--soft); }
+  nav.tabs button[aria-current="page"] { background: var(--soft); color: var(--accent); }
+  nav.tabs button[aria-current="page"] svg { color: var(--accent); }
+  nav.tabs button span { flex: 1; text-align: left; }
+  nav.tabs kbd { display: inline; font: 12px var(--f-num); color: var(--muted); }
+  header.top { padding: 18px 28px 10px; border-bottom: 1px solid var(--line); }
+  header.top h1 { font-size: 22px; flex: 0 1 auto; }
+  .date-chip { display: inline; flex: 1; }
+  main { padding: 20px 28px 40px; }
+  .screen { max-width: 1280px; gap: 16px; }
+  .cols { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; align-items: start; }
+  #screen-add .cols, #screen-shop .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .col { gap: 16px; }
+  .masonry { display: block; columns: 340px auto; column-gap: 16px; }
+  .masonry > * { break-inside: avoid; margin-bottom: 16px; }
+  .toolbar { max-width: 520px; }
+  .card { padding: 16px 18px; border-radius: 12px; }
+  .list > .item { padding: 7px 0; }
+  .list > button.item:hover, .day-row:hover { background: var(--soft); }
+  button, .btn { min-height: 34px; padding: 7px 14px; font-size: 14px; }
+  button.icon.sm { width: 28px; height: 28px; min-height: 28px; }
+  input, textarea, select { font-size: 15px; padding: 7px 10px; }
+  .chip { min-height: 30px; padding: 4px 12px; }
+  .big { font-size: 30px; }
+  .backdrop { align-items: center; padding: 24px; }
+  .sheet { border-radius: 14px; max-width: 600px; max-height: 86vh; padding: 20px 22px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+  .toasts { bottom: 24px; left: 208px; }
+  /* Row actions show on hover, like a desktop list. Still reachable by keyboard. */
+  .item .icon.sm { opacity: 0.35; }
+  .item:hover .icon.sm, .item .icon.sm:focus-visible { opacity: 1; }
+}
+@media (min-width: 760px) and (max-width: 980px) {
+  #app { grid-template-columns: 64px minmax(0, 1fr); }
+  nav.tabs .brand { font-size: 0; padding: 6px 0 16px; }
+  nav.tabs .brand::first-letter { font-size: 18px; }
+  nav.tabs button { justify-content: center; padding: 9px 0; }
+  nav.tabs button span, nav.tabs kbd { display: none; }
+  .toasts { left: 64px; }
+  .cols, #screen-add .cols, #screen-shop .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+.card-head button, .toolbar button, nav.tabs button { white-space: nowrap; }

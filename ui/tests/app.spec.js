@@ -368,3 +368,29 @@ test('3000 log rows: every tab renders in under 400 ms', async ({ page }) => {
   expect(ms, 'render time for history').toBeLessThan(400);
   await expect(page.locator('[data-hist]').first()).toBeVisible();
 });
+
+test('Desktop layout: sidebar, columns, shortcuts, no sideways scroll', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await open(page);
+  const nav = await page.locator('nav.tabs').boundingBox();
+  expect(nav.height).toBeGreaterThan(500); // vertical sidebar, not a bottom bar
+  expect(nav.x).toBe(0);
+  const cols = page.locator('#screen-today .cols > .col');
+  const [a, b] = [await cols.nth(0).boundingBox(), await cols.nth(1).boundingBox()];
+  expect(b.x).toBeGreaterThan(a.x + a.width - 1); // side by side
+  for (const t of ['today', 'add', 'meds', 'stock', 'week', 'shop']) {
+    await tab(page, t).click();
+    const w = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(w, `scroll width on ${t}`).toBeLessThanOrEqual(1200);
+  }
+  await page.keyboard.press('ControlOrMeta+1');
+  await expect(page.locator('#title')).toHaveText('Today');
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.getByRole('button', { name: 'Back to today' })).toBeVisible();
+  await page.keyboard.press('ControlOrMeta+n');
+  await expect(page.locator('#describe')).toBeFocused();
+  await page.keyboard.press('ControlOrMeta+,');
+  const dlg = await page.locator('.sheet').boundingBox();
+  expect(dlg.y).toBeGreaterThan(10); // centered dialog, not a bottom sheet
+  expect(dlg.y + dlg.height).toBeLessThan(800 - 10);
+});

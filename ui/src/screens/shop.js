@@ -12,10 +12,10 @@ function mount(root) {
     seg.append(h('button', { type: 'button', 'data-trip': t, 'aria-pressed': String(trip === t), onclick: () => { trip = t; for (const b of seg.children) b.setAttribute('aria-pressed', String(Number(b.dataset.trip) === trip)); refresh(); } }, `Trip ${t}`));
   }
   els.budget = h('div', { class: 'card', 'aria-label': 'Budget' });
-  els.list = h('div', { class: 'screen' });
+  els.list = h('div', { class: 'masonry' });
   els.inStock = h('div', { class: 'card hidden', 'aria-label': 'Already in stock' });
   els.actions = h('div', { class: 'grid2' });
-  root.append(seg, els.budget, addCard(), els.actions, els.list, els.inStock);
+  root.append(h('div', { class: 'cols' }, h('div', { class: 'col' }, seg, els.budget, addCard(), els.actions, els.inStock), h('div', { class: 'col' }, els.list)));
 }
 
 function addCard() {

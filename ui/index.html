@@ -8,13 +8,16 @@
   </head>
   <body>
     <div id="app">
-      <header class="top">
-        <h1 id="title">Today</h1>
-        <button class="icon" id="open-rules" aria-label="House rules chat" title="House rules chat"></button>
-        <button class="icon" id="open-settings" aria-label="Settings" title="Settings"></button>
-      </header>
-      <main id="main"></main>
-      <nav class="tabs" id="tabs" aria-label="Screens"></nav>
+      <nav class="tabs" id="tabs" aria-label="Screens"><div class="brand">PrivateI</div></nav>
+      <div class="content">
+        <header class="top">
+          <h1 id="title">Today</h1>
+          <span class="date-chip small muted" id="date-chip"></span>
+          <button class="icon" id="open-rules" aria-label="House rules chat" title="House rules chat (⌘K)"></button>
+          <button class="icon" id="open-settings" aria-label="Settings" title="Settings (⌘,)"></button>
+        </header>
+        <main id="main"></main>
+      </div>
     </div>
     <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
     <script type="module" src="./src/main.js"></script>

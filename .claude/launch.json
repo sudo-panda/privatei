@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ui-mock",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "preview", "--config", "ui/vite.config.js", "--mode", "mock", "--port", "4173", "--strictPort", "--host", "127.0.0.1"],
+      "port": 4173
+    }
+  ]
+}

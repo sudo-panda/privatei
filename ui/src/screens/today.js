@@ -21,7 +21,7 @@ function mount(root) {
   els.food = h('div', { class: 'card', 'aria-label': 'Food logged' });
   els.meds = h('div', { class: 'card hidden', 'aria-label': 'Medicines' });
   els.training = h('div', { class: 'card', 'aria-label': 'Training' });
-  root.append(els.nav, els.energy, els.plan, els.food, els.meds, els.training);
+  root.append(h('div', { class: 'cols' }, h('div', { class: 'col' }, els.nav, els.energy, els.plan, els.meds), h('div', { class: 'col' }, els.food, els.training)));
 }
 
 async function refresh() {

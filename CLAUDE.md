@@ -37,6 +37,8 @@ tests/fixtures/         made-up sample export (never real data)
 - Gemini: key in the `x-goog-api-key` header, never in the URL.
 - Clean every AI answer (`ai::clean_food`, `ai::clean_rules_reply`); the UI only ever sets
   `textContent` (see `ui/src/dom.js`; `h()` refuses `html`).
+- Layout: desktop first (sidebar + `.cols` two-column grid, centered dialogs) at ≥ 760 px;
+  the phone layout (bottom tabs, bottom sheets) below that, for 360 px and the future Android app.
 - Typing must never lose focus or text when data changes: screens mount their inputs once and
   only re-render read-only containers.
 - Personal data never goes in git.

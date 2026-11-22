@@ -29,12 +29,55 @@ const tabs = document.getElementById('tabs');
 const title = document.getElementById('title');
 let current = null;
 
-for (const s of screens) {
+const MAC = /Mac/.test(navigator.platform || navigator.userAgent);
+screens.forEach((s, i) => {
   s.el = h('section', { class: 'screen hidden', id: `screen-${s.id}`, 'aria-label': s.title });
   main.append(s.el);
-  s.tab = h('button', { type: 'button', 'data-tab': s.id, 'aria-label': s.title, onclick: () => show(s.id) }, icon(s.icon), h('span', { text: s.short || s.title }));
+  s.tab = h(
+    'button',
+    { type: 'button', 'data-tab': s.id, 'aria-label': s.title, title: `${s.title} (${MAC ? '⌘' : 'Ctrl+'}${i + 1})`, onclick: () => show(s.id) },
+    icon(s.icon),
+    h('span', { text: s.short || s.title }),
+    h('kbd', { 'aria-hidden': 'true', text: `${MAC ? '⌘' : '^'}${i + 1}` }),
+  );
   tabs.append(s.tab);
+});
+
+const dateChip = document.getElementById('date-chip');
+function updateDateChip() {
+  if (!state.today) return;
+  const [y, m, d] = state.today.split('-').map(Number);
+  dateChip.textContent = new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 }
+
+// Desktop shortcuts: ⌘1–6 screens, ⌘, settings, ⌘K rules chat, ⌘N describe food, ←/→ step days on Today.
+document.addEventListener('keydown', (e) => {
+  const mod = MAC ? e.metaKey : e.ctrlKey;
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+  if (mod && !e.shiftKey && !e.altKey) {
+    if (/^[1-6]$/.test(e.key) && !anySheetOpen()) {
+      e.preventDefault();
+      show(screens[Number(e.key) - 1].id);
+    } else if (e.key === ',' && !anySheetOpen()) {
+      e.preventDefault();
+      openSettings();
+    } else if (e.key.toLowerCase() === 'k' && !anySheetOpen()) {
+      e.preventDefault();
+      openRules();
+    } else if (e.key.toLowerCase() === 'n' && !anySheetOpen()) {
+      e.preventDefault();
+      show('add').then(() => document.getElementById('describe')?.focus());
+    }
+    return;
+  }
+  if (!typing && !anySheetOpen() && current?.id === 'today' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    const btn = document.querySelector(e.key === 'ArrowLeft' ? '[aria-label="Previous day"]' : '[aria-label="Next day"]');
+    if (btn && !btn.disabled) {
+      e.preventDefault();
+      btn.click();
+    }
+  }
+});
 
 function show(id, opts = {}) {
   const s = screens.find((x) => x.id === id) || screens[0];
@@ -67,6 +110,7 @@ onChange(() => {
 
 async function rollDay() {
   const t = await quiet('today');
+  queueMicrotask(updateDateChip);
   if (t !== state.today) {
     const wasToday = state.date === state.today;
     state.today = t;

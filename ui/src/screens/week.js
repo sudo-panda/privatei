@@ -13,7 +13,7 @@ function mount(root) {
     h('button', { type: 'button', 'aria-pressed': String(mode === id), 'data-mode': id, onclick: () => { mode = id; for (const b of seg.children) b.setAttribute('aria-pressed', String(b.dataset.mode === mode)); refresh(); } }, text);
   seg.append(btn('plan', 'The plan'), btn('history', 'What happened'));
   els.body = h('div', { class: 'screen' });
-  root.append(seg, els.body);
+  root.append(h('div', { class: 'toolbar' }, seg), els.body);
 }
 
 async function refresh() {
@@ -24,7 +24,7 @@ async function refresh() {
 function renderPlan(w) {
   fill(
     els.body,
-    h(
+    h('div', { class: 'cols' }, h('div', { class: 'col' }, h(
       'div',
       { class: 'card' },
       h('div', { class: 'row spread' }, h('h2', { text: 'The plan' }), h('span', { class: 'small muted num', 'data-testid': 'plan-avg', text: w.plannedDays ? `avg ${n0(w.avgKcal)} kcal · ${n1(w.avgProt)} g` : 'nothing planned' })),
@@ -36,8 +36,8 @@ function renderPlan(w) {
           refresh();
         },
       }, 'Repeat the last planned week'),
-    ),
-    h('div', { class: 'card' }, h('div', { class: 'list' }, w.days.map((d) => dayRow(d)))),
+    )), h('div', { class: 'col' },
+    h('div', { class: 'card' }, h('div', { class: 'list' }, w.days.map((d) => dayRow(d)))))),
   );
 }
 
@@ -112,7 +112,7 @@ function renderHistory(hist) {
   const used = s.daysUsed;
   fill(
     els.body,
-    h(
+    h('div', { class: 'cols' }, h('div', { class: 'col' }, h(
       'div',
       { class: 'card', 'aria-label': 'Summary' },
       h('h2', { text: 'What happened' }),
@@ -127,8 +127,7 @@ function renderHistory(hist) {
         stat('Days trained', String(s.daysTrained)),
         stat('Days used', String(used)),
       ),
-    ),
-    h(
+    )), h('div', { class: 'col' }, h(
       'div',
       { class: 'card' },
       h('div', { class: 'list' }, hist.days.map((d) =>
@@ -147,7 +146,7 @@ function renderHistory(hist) {
         h('span', { class: `num small ${d.over ? 'error' : ''}`, text: `${n0(d.kcal)} kcal` }),
         h('span', { class: `num small ${d.protMet ? 'ok' : 'muted'}`, text: `${n1(d.prot)} g` }),
         ))),
-    ),
+    ))),
   );
 }
 

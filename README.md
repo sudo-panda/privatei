@@ -28,6 +28,20 @@ don't know, and the house-rules chat.
   **Work out the calories**. Known foods are worked out on the Mac; only unknown ones go to the AI,
   and what the AI learns is remembered for next time.
 
+## Keyboard
+
+| Keys | Does |
+|---|---|
+| ⌘1 – ⌘6 | Today, Add, Meds, Stock, Week, Shop |
+| ⌘N | Describe food |
+| ⌘, | Settings |
+| ⌘K | House rules chat |
+| ← / → | Previous / next day on Today |
+| Esc | Close a dialog |
+
+The window is laid out for the desktop (sidebar, two columns). Below 760 px wide it
+switches to the compact phone layout, which the Android app will reuse.
+
 ## Bring your data over from Larder
 
 Settings → **Restore / import…** → pick your `larder-data.json`. Both the old

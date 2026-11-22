@@ -17,8 +17,8 @@ function schedule(m) {
 
 function mount(root) {
   els.add = h('button', { type: 'button', class: 'primary', onclick: () => openEditor(null) }, 'Add medicine');
-  els.list = h('div', { class: 'screen' });
-  root.append(els.add, els.list);
+  els.list = h('div', { class: 'masonry' });
+  root.append(h('div', { class: 'toolbar' }, els.add), els.list);
 }
 
 function section(title, meds, stopped = false) {
