@@ -575,7 +575,13 @@ test('Log date bar: scrolls to the selected day, Today pinned and outlined', asy
   await open(page, 'seed=demo&layout=new&hhmm=12:00');
   const todayBtn = page.locator('.strip-day.is-today');
   await expect(todayBtn).toHaveAttribute('aria-pressed', 'true');
-  for (let i = 0; i < 45; i++) await page.getByLabel('Previous day').click();
+  // Stepping back to days already in view doesn't move the bar.
+  const track = page.locator('.strip-track');
+  const before = await track.evaluate((t) => t.scrollLeft);
+  for (let i = 0; i < 3; i++) await page.getByLabel('Previous day').click();
+  await expect(page.locator('.strip-track [aria-pressed="true"]')).toHaveAttribute('data-date', '2026-11-19');
+  expect(await track.evaluate((t) => t.scrollLeft)).toBe(before);
+  for (let i = 0; i < 42; i++) await page.getByLabel('Previous day').click();
   const sel = page.locator('.strip-track [aria-pressed="true"]');
   await expect(sel).toHaveAttribute('data-date', '2026-10-08');
   await expect(sel).toBeInViewport();

@@ -71,6 +71,13 @@ function renderStrip() {
     h('b', { class: 'num', text: String(dd) }));
   };
   const track = h('div', { class: 'strip-track', role: 'group', 'aria-label': 'Days' }, days.map((x) => dayBtn(x)));
+  // Remember which day sat at the left edge, so redrawing doesn't move the bar.
+  const old = els.nav.querySelector('.strip-track');
+  let anchor = null;
+  if (old) {
+    const first = [...old.children].find((c) => c.offsetLeft + c.offsetWidth > old.scrollLeft);
+    if (first) anchor = { date: first.dataset.date, delta: first.offsetLeft - old.scrollLeft };
+  }
   fill(
     els.nav,
     h('div', { class: 'strip-bar' },
@@ -79,11 +86,17 @@ function renderStrip() {
       dayBtn(d.today, true),
       h('button', { class: 'icon', type: 'button', 'aria-label': 'Next day', title: 'Next day', disabled: d.isToday, onclick: () => setDate(shift(d.date, 1)) }, icon('right'))),
   );
-  // Scroll the track (not the page) so the selected day sits near the right edge, or show the latest days.
-  requestAnimationFrame(() => {
-    const sel = track.querySelector('[aria-pressed="true"]');
-    track.scrollLeft = sel ? Math.max(0, sel.offsetLeft - track.clientWidth + sel.offsetWidth * 3) : track.scrollWidth;
-  });
+  // Keep the bar where it was; scroll only if the selected day is out of view.
+  const ref = anchor && track.querySelector(`[data-date="${anchor.date}"]`);
+  track.scrollLeft = ref ? ref.offsetLeft - anchor.delta : track.scrollWidth;
+  const sel = track.querySelector('[aria-pressed="true"]');
+  if (sel) {
+    const pad = 4;
+    if (sel.offsetLeft < track.scrollLeft) track.scrollTo({ left: sel.offsetLeft - pad, behavior: 'smooth' });
+    else if (sel.offsetLeft + sel.offsetWidth > track.scrollLeft + track.clientWidth) {
+      track.scrollTo({ left: sel.offsetLeft + sel.offsetWidth - track.clientWidth + pad, behavior: 'smooth' });
+    }
+  }
   const chip = document.getElementById('date-chip');
   if (chip) {
     const [y, m, dd] = d.date.split('-').map(Number);
