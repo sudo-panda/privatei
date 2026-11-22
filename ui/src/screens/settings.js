@@ -122,10 +122,11 @@ function renderTargets() {
     els.targets,
     section(
       'Targets',
-      row('Weight', 'Used for training burn.', weight),
-      row('Daily calories', 'Your energy target.', kcal),
-      row('Protein floor', 'The minimum to hit each day.', prot),
-      row('Fiber floor', 'The minimum fiber each day.', fiber),
+      // One line each: name on the left, the box and its unit on the right.
+      h('div', { class: 'target-rows' },
+        [['Weight', weight], ['Daily calories', kcal], ['Protein floor', prot], ['Fiber floor', fiber]].map(([label, f]) =>
+          h('label', { class: 'target-row' }, h('span', { class: 'set-name', text: label }), f))),
+      h('div', { class: 'small muted target-hint', text: 'Floors are the minimum to reach each day. Weight is used to estimate training burn.' }),
       st,
     ),
   );

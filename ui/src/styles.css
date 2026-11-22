@@ -278,6 +278,13 @@ details > summary::-webkit-details-marker { display: none; }
 .stack { display: flex; flex-direction: column; gap: 6px; width: 100%; }
 .with-unit { display: flex; align-items: center; gap: 8px; width: 160px; }
 .with-unit input { text-align: right; }
+.target-rows { display: flex; flex-direction: column; }
+.target-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; cursor: default; }
+.target-row + .target-row { border-top: 1px solid var(--line); }
+.target-row .with-unit { width: 150px; flex: none; }
+.target-row .with-unit input { min-height: 32px; padding: 4px 8px; }
+.target-row .with-unit span { width: 30px; }
+.target-hint { padding: 4px 0 10px; }
 .set-intro { margin: 10px 0 2px; }
 .set-status { min-height: 0; padding: 0 0 8px; }
 .set-status:empty { display: none; }
