@@ -38,16 +38,8 @@ function mount(root, o = {}) {
   }
 }
 
-/** Open Add food; with a meal, everything you add goes into that meal. */
-export function openAdd(meal = null) {
-  if (!els.addOverlay) return;
-  opts.addPanel.setMeal(meal);
-  els.addOverlay.open('#food-search');
-}
-
-function addTo(meal) {
-  if (opts.addPanel) openAdd(meal);
-  else go('add');
+export function openAdd() {
+  if (els.addOverlay) els.addOverlay.open('#food-search');
 }
 
 async function refresh(o = {}) {
@@ -231,7 +223,7 @@ function render() {
         h('span', { class: 'fn', text: g.meal }),
         cell(g.rows.length ? n0(g.kcal) : ''),
         cell(g.rows.length ? fx(g.prot) : ''),
-        h('span', { class: 'fc' }, iconButton('add', `Add to ${g.meal}`, () => addTo(g.meal), 'icon sm ghost meal-add'))),
+        cell('')),
       g.rows.length ? null : h('div', { class: 'food-empty small muted', text: 'Nothing yet' }),
       g.rows.map((r) => {
         const [name, amount] = split(r.name);

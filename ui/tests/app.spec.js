@@ -540,13 +540,14 @@ test('Recipes: build from ingredients, then log a serving from search', async ({
   await expect(page.locator('.recipe-card')).toContainText('Masoor dal');
   // Log one serving from the Log's search
   await tab(page, 'today').click();
-  await page.getByRole('button', { name: 'Add to Dinner' }).click();
+  await page.locator('#open-add').click();
   await page.locator('#food-search').fill('masoor');
   const hit = page.locator('.food-hit').first();
   await expect(hit).toContainText('Recipe');
   await hit.click();
   await page.locator('.food-picked .chip', { hasText: '1 serving' }).click();
   await expect(page.locator('#food-search-grams')).toHaveValue('300');
+  await page.locator('.food-picked [aria-label="Meal"] [data-v="Dinner"]').click();
   await page.getByRole('button', { name: 'Add to log' }).click();
   await expect(page.locator('[data-meal="Dinner"]')).toContainText('Masoor dal');
 });
@@ -665,19 +666,15 @@ test('Log always shows the four meals, a compact summary and a floating Add butt
   expect(before.x + before.width).toBeGreaterThan(1280 - 80);
   await page.locator('main').evaluate((m) => m.scrollTo(0, 400));
   expect((await fab.boundingBox()).y).toBe(before.y);
-  // Adding from a meal's + puts the food in that meal, whatever the time of day
-  await page.getByRole('button', { name: 'Add to Snack' }).click();
-  await page.locator('#food-search').fill('lentils');
-  await page.locator('.overlay-sheet .food-hit').first().click();
-  await expect(page.locator('.food-picked [aria-label="Meal"] [aria-pressed="true"]')).toHaveText('Snack');
-  await page.getByRole('button', { name: 'Add to log' }).click();
-  await expect(page.locator('[data-meal="Snack"]')).toContainText('Lentils');
-  await expect(page.locator('[data-meal="Snack"]')).not.toContainText('Nothing yet');
-  // The floating button goes back to guessing from the time of day
+  // Meals have no + of their own; food goes in through the floating button
+  await expect(page.locator('.food-head button')).toHaveCount(0);
   await fab.click();
   await page.locator('#food-search').fill('lentils');
   await page.locator('.overlay-sheet .food-hit').first().click();
-  await expect(page.locator('.food-picked [aria-label="Meal"] [aria-pressed="true"]')).not.toHaveText('');
+  await page.locator('.food-picked [aria-label="Meal"] [data-v="Snack"]').click();
+  await page.getByRole('button', { name: 'Add to log' }).click();
+  await expect(page.locator('[data-meal="Snack"]')).toContainText('Lentils');
+  await expect(page.locator('[data-meal="Snack"]')).not.toContainText('Nothing yet');
 });
 
 test('Floating Add button sits above the phone tabs', async ({ page }) => {
