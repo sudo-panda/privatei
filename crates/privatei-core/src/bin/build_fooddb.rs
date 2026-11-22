@@ -3,6 +3,7 @@
 //! cargo run -p privatei-core --features import --bin build-fooddb -- \
 //!   --out apps/desktop/resources/foods.sqlite --version 2026-10 <usda-csv-dir>...
 //!
+//! Optional: --cofid <CoFID 2021 xlsx> (Open Government Licence, shipped).
 //! Optional: --swiss <file.xlsx> (only for local testing; the Swiss database is
 //! downloaded by the app, not shipped).
 
@@ -15,12 +16,14 @@ fn main() {
     let mut out = PathBuf::from("foods.sqlite");
     let mut version = String::from("unknown");
     let mut swiss: Option<PathBuf> = None;
+    let mut cofid: Option<PathBuf> = None;
     let mut dirs: Vec<PathBuf> = vec![];
     while let Some(a) = args.next() {
         match a.as_str() {
             "--out" => out = args.next().expect("--out needs a path").into(),
             "--version" => version = args.next().expect("--version needs a value"),
             "--swiss" => swiss = Some(args.next().expect("--swiss needs a file").into()),
+            "--cofid" => cofid = Some(args.next().expect("--cofid needs a file").into()),
             _ => dirs.push(a.into()),
         }
     }
@@ -33,6 +36,12 @@ fn main() {
         let foods = importers::usda_from_dirs(&refs).expect("read USDA");
         let n = db.replace_source(&importers::usda_info(&version), &foods).expect("write USDA");
         eprintln!("USDA: {n} foods");
+    }
+    if let Some(c) = cofid {
+        let bytes = std::fs::read(&c).expect("read CoFID xlsx");
+        let foods = importers::cofid_from_xlsx(&bytes).expect("parse CoFID");
+        let n = db.replace_source(&importers::cofid_info("2021"), &foods).expect("write CoFID");
+        eprintln!("CoFID: {n} foods");
     }
     if let Some(s) = swiss {
         let bytes = std::fs::read(&s).expect("read Swiss xlsx");

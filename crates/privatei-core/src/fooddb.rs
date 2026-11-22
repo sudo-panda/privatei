@@ -145,7 +145,17 @@ impl FoodDb {
             .split(|c: char| !c.is_alphanumeric())
             .filter(|w| !w.is_empty())
             .take(8)
-            .map(|w| format!("\"{}\"*", w.replace('"', "")))
+            .map(|w| {
+                let w = w.replace('"', "");
+                let alts = synonyms(&w.to_lowercase());
+                if alts.is_empty() {
+                    format!("\"{w}\"*")
+                } else {
+                    let mut all = vec![format!("\"{w}\"*")];
+                    all.extend(alts.iter().map(|a| format!("\"{a}\"*")));
+                    format!("({})", all.join(" OR "))
+                }
+            })
             .collect();
         if words.is_empty() {
             return vec![];
@@ -265,6 +275,26 @@ pub fn vacuum(path: &Path) -> Result<()> {
     c.execute_batch("INSERT INTO food_fts(food_fts) VALUES('optimize'); VACUUM;").map_err(err)
 }
 
+/// Spelling variants across US, UK, Swiss and Indian names.
+const SYNONYMS: &[&[&str]] = &[
+    &["dal", "dahl", "dhal", "daal"],
+    &["chapati", "chapatti", "chapatis", "roti"],
+    &["yogurt", "yoghurt"],
+    &["eggplant", "aubergine", "brinjal"],
+    &["zucchini", "courgette"],
+    &["cilantro", "coriander"],
+    &["shrimp", "prawn", "prawns"],
+    &["chickpea", "chickpeas", "garbanzo", "chana"],
+    &["chili", "chilli", "chile"],
+    &["okra", "bhindi"],
+    &["spinach", "palak", "saag"],
+    &["cottage", "paneer"],
+];
+
+fn synonyms(w: &str) -> Vec<&'static str> {
+    SYNONYMS.iter().find(|g| g.contains(&w)).map(|g| g.iter().copied().filter(|x| *x != w).collect()).unwrap_or_default()
+}
+
 /// A food to import.
 #[derive(Debug, Clone, Default)]
 pub struct NewFood {
@@ -359,6 +389,7 @@ mod tests {
     #[test]
     fn search_and_get() {
         let db = sample_db();
+        assert_eq!(db.search("garbanzo", 5)[0].reference, "usda:3", "synonyms: garbanzo finds chickpeas");
         let hits = db.search("chick bre", 10);
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].reference, "usda:1");

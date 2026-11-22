@@ -539,7 +539,7 @@ test('Recipes: build from ingredients, then log a serving from search', async ({
   await page.locator('#open-add').click();
   await page.locator('#food-search').fill('masoor');
   const hit = page.locator('.food-hit').first();
-  await expect(hit).toContainText('My recipes');
+  await expect(hit).toContainText('Recipe');
   await hit.click();
   await page.locator('.food-picked .chip', { hasText: '1 serving' }).click();
   await expect(page.locator('#food-search-grams')).toHaveValue('300');

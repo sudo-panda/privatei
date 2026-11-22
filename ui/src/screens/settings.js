@@ -258,7 +258,7 @@ function renderFoods(sources, note = null) {
         h('div', { class: 'small muted', text: `${x.foods.toLocaleString()} foods · ${x.version}` }),
         h('details', { class: 'small' }, h('summary', { text: 'Licence and source' }), h('div', { class: 'muted', text: `${x.licence}. ${x.attribution}` }))),
       h('div', { class: 'set-control' },
-        x.id === 'usda'
+        x.id === 'usda' || x.id === 'cofid'
           ? h('span', { class: 'badge good', text: 'Built in' })
           : h('button', { type: 'button', class: 'ghost danger', onclick: async () => { await call('remove_food_source', { id: x.id }); renderFoods(await call('food_sources')); } }, 'Remove'))));
   const offers = AVAILABLE.filter((a) => !have.has(a.id)).map((a) => {

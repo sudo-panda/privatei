@@ -2,7 +2,7 @@
 import { h, fill, n0, n1, chipGroup } from './dom.js';
 import { quiet } from './api.js';
 
-const SOURCE = { table: 'Built-in', mine: 'Learned', usda: 'USDA', swiss: 'Swiss' };
+const SOURCE = { table: 'Built-in', mine: 'Learned', recipe: 'Recipe', usda: 'USDA', cofid: 'UK', swiss: 'Swiss', bls: 'German', off: 'Product' };
 
 /**
  * opts.onPick(food, grams, meal) — called when you confirm an amount.

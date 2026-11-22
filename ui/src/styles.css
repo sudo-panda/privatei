@@ -419,3 +419,5 @@ details > summary::-webkit-details-marker { display: none; }
 .recipe-card { text-align: left; width: 100%; font-weight: 400; align-items: stretch; }
 .recipe-card:hover { border-color: var(--accent); }
 .recipe-totals { border-top: 1px solid var(--line); padding-top: 8px; }
+.badge.src-cofid { color: var(--accent); background: var(--soft); }
+.badge.src-recipe { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }

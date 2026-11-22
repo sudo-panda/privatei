@@ -1469,8 +1469,8 @@ impl Core {
     }
 
     pub fn remove_food_source(&mut self, id: &str) -> Result<()> {
-        if id == "usda" {
-            return Err("The USDA database comes with the app and can't be removed.".into());
+        if id == "usda" || id == "cofid" {
+            return Err("That database comes with the app and can't be removed.".into());
         }
         self.foods.as_ref().ok_or("The food database isn't open.")?.remove_source(id)
     }

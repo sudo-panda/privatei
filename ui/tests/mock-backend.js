@@ -3,7 +3,7 @@
 // and has its own tests; this only needs to be believable enough to drive every screen.
 import { mockIPC } from '@tauri-apps/api/mocks';
 import CATALOG from './fixtures/catalog.json';
-import USDA_SAMPLE from './fixtures/usda-sample.json';
+import USDA_SAMPLE from './fixtures/foods-sample.json';
 
 const params = new URLSearchParams(location.search);
 const TODAY = params.get('today') || '2026-11-22';
@@ -62,7 +62,7 @@ const db = {
   aiAvailable: true,
   online: true,
   swiss: [],
-  sources: [{ id: 'usda', name: 'USDA FoodData Central', version: 'SR Legacy 2018-04 + Foundation 2026-10', licence: 'Public domain (CC0 1.0)', attribution: 'U.S. Department of Agriculture, Agricultural Research Service. FoodData Central (SR Legacy, Foundation Foods). fdc.nal.usda.gov', url: 'https://fdc.nal.usda.gov/download-datasets/', importedAt: 0, foods: 8237 }],
+  sources: [{ id: 'cofid', name: 'UK CoFID (McCance and Widdowson)', version: '2021', licence: 'Open Government Licence v3.0', attribution: "Contains public sector information licensed under the Open Government Licence v3.0. McCance and Widdowson's Composition of Foods Integrated Dataset, Public Health England / OHID.", url: 'https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid', importedAt: 0, foods: 2882 }, { id: 'usda', name: 'USDA FoodData Central', version: 'SR Legacy 2018-04 + Foundation 2026-10', licence: 'Public domain (CC0 1.0)', attribution: 'U.S. Department of Agriculture, Agricultural Research Service. FoodData Central (SR Legacy, Foundation Foods). fdc.nal.usda.gov', url: 'https://fdc.nal.usda.gov/download-datasets/', importedAt: 0, foods: 8237 }],
   ts: 1,
   calls: [],
 };
@@ -169,7 +169,7 @@ function builtin() {
   return out;
 }
 function allFoods() {
-  return [...builtin(), ...(db.sources.some((x) => x.id === 'usda') ? USDA_SAMPLE : []), ...db.swiss];
+  return [...builtin(), ...USDA_SAMPLE, ...db.swiss];
 }
 function recipeView(rid, r) {
   const raw = r.ingredients.reduce((a, i) => a + i.grams, 0);

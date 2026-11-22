@@ -130,6 +130,151 @@ pub fn usda_from_dirs(dirs: &[&Path]) -> Result<Vec<NewFood>> {
     Ok(out)
 }
 
+pub fn cofid_info(version: &str) -> SourceInfo {
+    SourceInfo {
+        id: "cofid".into(),
+        name: "UK CoFID (McCance and Widdowson)".into(),
+        version: version.into(),
+        licence: "Open Government Licence v3.0".into(),
+        attribution: "Contains public sector information licensed under the Open Government Licence v3.0. McCance and Widdowson's Composition of Foods Integrated Dataset, Public Health England / OHID.".into(),
+        url: "https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid".into(),
+        imported_at: 0,
+        foods: 0,
+    }
+}
+
+/// CoFID values: numbers, "Tr" (trace), "N" (present, amount unknown), blank.
+fn cofid_value(s: &str) -> Option<f64> {
+    let t = s.trim();
+    match t {
+        "" | "N" | "n" => None,
+        "Tr" | "tr" | "TR" => Some(0.0),
+        _ => t.trim_start_matches('(').trim_end_matches(')').parse().ok().filter(|x: &f64| x.is_finite() && *x >= 0.0),
+    }
+}
+
+fn cofid_group(code: &str) -> &'static str {
+    match code.chars().next() {
+        Some('A') => "Cereals and cereal products",
+        Some('B') => "Milk and milk products",
+        Some('C') => "Eggs",
+        Some('D') => "Vegetables",
+        Some('F') => "Fruit",
+        Some('G') => "Nuts and seeds",
+        Some('H') => "Herbs and spices",
+        Some('J') => "Fish and fish products",
+        Some('M') => "Meat and meat products",
+        Some('O') => "Fats and oils",
+        Some('P') => "Beverages",
+        Some('Q') => "Alcoholic beverages",
+        Some('S') => "Sugars, preserves and snacks",
+        Some('W') => "Soups, sauces and miscellaneous",
+        _ => "",
+    }
+}
+
+/// (sheet name prefix, column header, catalog key; "_kcal"/"_prot" for energy and protein).
+const COFID_COLUMNS: &[(&str, &str, &str)] = &[
+    ("1.3", "Energy (kcal) (kcal)", "_kcal"),
+    ("1.3", "Protein (g)", "_prot"),
+    ("1.3", "Water (g)", "water"),
+    ("1.3", "Fat (g)", "fat"),
+    ("1.3", "Carbohydrate (g)", "carbs"),
+    ("1.3", "Starch (g)", "starch"),
+    ("1.3", "Total sugars (g)", "sugar"),
+    ("1.3", "Alcohol (g)", "alcohol"),
+    ("1.3", "AOAC fibre (g)", "fiber"),
+    ("1.3", "Satd FA /100g fd (g)", "satFat"),
+    ("1.3", "Mono FA /100g food (g)", "monoFat"),
+    ("1.3", "Poly FA /100g food (g)", "polyFat"),
+    ("1.3", "Trans FAs /100g food (g)", "transFat"),
+    ("1.3", "Cholesterol (mg)", "cholesterol"),
+    ("1.4", "Sodium (mg)", "sodium"),
+    ("1.4", "Potassium (mg)", "potassium"),
+    ("1.4", "Calcium (mg)", "calcium"),
+    ("1.4", "Magnesium (mg)", "magnesium"),
+    ("1.4", "Phosphorus (mg)", "phosphorus"),
+    ("1.4", "Iron (mg)", "iron"),
+    ("1.4", "Copper (mg)", "copper"),
+    ("1.4", "Zinc (mg)", "zinc"),
+    ("1.4", "Manganese (mg)", "manganese"),
+    ("1.4", "Selenium (µg)", "selenium"),
+    ("1.4", "Iodine (µg)", "iodine"),
+    ("1.5", "Retinol Equivalent (µg)", "vitA"),
+    ("1.5", "Vitamin D (µg)", "vitD"),
+    ("1.5", "Vitamin E (mg)", "vitE"),
+    ("1.5", "Vitamin K1 (µg)", "vitK"),
+    ("1.5", "Thiamin (mg)", "vitB1"),
+    ("1.5", "Riboflavin (mg)", "vitB2"),
+    ("1.5", "Niacin (mg)", "vitB3"),
+    ("1.5", "Vitamin B6 (mg)", "vitB6"),
+    ("1.5", "Vitamin B12 (µg)", "b12"),
+    ("1.5", "Folate (µg)", "folate"),
+    ("1.5", "Pantothenate (mg)", "vitB5"),
+    ("1.5", "Vitamin C (mg)", "vitC"),
+    ("1.12", "cis n-3 C18:3 /100g food (g)", "ala"),
+    ("1.12", "cis n-3 C20:5 /100g food (g)", "epa"),
+    ("1.12", "cis n-3 C22:6 /100g food (g)", "dha"),
+];
+
+/// Parse the CoFID 2021 workbook: sheets joined by food code.
+pub fn cofid_from_xlsx(bytes: &[u8]) -> Result<Vec<NewFood>> {
+    use calamine::{Data, Reader, Xlsx};
+    let mut wb: Xlsx<_> = Xlsx::new(std::io::Cursor::new(bytes)).map_err(err)?;
+    let text = |c: &Data| match c {
+        Data::String(s) => s.clone(),
+        Data::Float(f) => f.to_string(),
+        Data::Int(i) => i.to_string(),
+        _ => String::new(),
+    };
+    let mut foods: HashMap<String, NewFood> = HashMap::new();
+    let mut order: Vec<String> = vec![];
+    for sheet in wb.sheet_names().to_vec() {
+        let prefix = sheet.split_whitespace().next().unwrap_or("").to_string();
+        let cols: Vec<&(&str, &str, &str)> = COFID_COLUMNS.iter().filter(|(p, _, _)| *p == prefix).collect();
+        if cols.is_empty() {
+            continue;
+        }
+        let range = wb.worksheet_range(&sheet).map_err(err)?;
+        let rows: Vec<Vec<String>> = range.rows().map(|r| r.iter().map(text).collect()).collect();
+        let Some(hi) = rows.iter().position(|r| r.get(1).map(|c| c.trim()) == Some("Food Name")) else { continue };
+        let head = &rows[hi];
+        let idx: Vec<(usize, &str)> = cols.iter().filter_map(|(_, name, key)| head.iter().position(|h| h.trim() == *name).map(|i| (i, *key))).collect();
+        let c_group = head.iter().position(|h| h.trim() == "Group");
+        for r in &rows[hi + 1..] {
+            let code = r.first().map(|c| c.trim()).unwrap_or("");
+            let name = r.get(1).map(|c| c.trim()).unwrap_or("");
+            if code.is_empty() || name.is_empty() {
+                continue;
+            }
+            let f = foods.entry(code.to_string()).or_insert_with(|| {
+                order.push(code.to_string());
+                NewFood {
+                    source_id: code.to_string(),
+                    name: name.to_string(),
+                    category: c_group.and_then(|i| r.get(i)).map(|g| cofid_group(g.trim()).to_string()).unwrap_or_default(),
+                    ..Default::default()
+                }
+            });
+            for (i, key) in &idx {
+                let Some(v) = r.get(*i).and_then(|c| cofid_value(c)) else { continue };
+                match *key {
+                    "_kcal" => f.kcal100 = v,
+                    "_prot" => f.prot100 = v,
+                    k => {
+                        f.nut100.insert(k.to_string(), v);
+                    }
+                }
+            }
+        }
+    }
+    let out: Vec<NewFood> = order.into_iter().filter_map(|c| foods.remove(&c)).filter(|f| f.kcal100 > 0.0 || f.prot100 > 0.0).collect();
+    if out.is_empty() {
+        return Err(err("no foods found in the CoFID file"));
+    }
+    Ok(out)
+}
+
 /// A cell value from the Swiss sheet: numbers, "n.d." (unknown), "tr." (trace), "<0.5".
 fn swiss_value(s: &str) -> Option<f64> {
     let t = s.trim();
@@ -241,6 +386,16 @@ pub fn download_swiss() -> Result<(Vec<u8>, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cofid_values() {
+        assert_eq!(cofid_value("12.5"), Some(12.5));
+        assert_eq!(cofid_value("Tr"), Some(0.0));
+        assert_eq!(cofid_value("N"), None);
+        assert_eq!(cofid_value(""), None);
+        assert_eq!(cofid_value("(1.2)"), Some(1.2));
+        assert_eq!(cofid_group("DG"), "Vegetables");
+    }
 
     #[test]
     fn swiss_values() {
