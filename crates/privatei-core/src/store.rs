@@ -325,7 +325,7 @@ fn migrate(conn: &Connection) -> Result<()> {
         conn.execute_batch(&sql).map_err(err)?;
     }
     if version > SCHEMA_VERSION {
-        return Err(format!("This database was made by a newer PrivateI (schema {version})."));
+        return Err(format!("This database was made by a newer Private-I (schema {version})."));
     }
     Ok(())
 }

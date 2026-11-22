@@ -244,7 +244,7 @@ function renderBackup() {
     onclick: async () => {
       const d = new Date();
       const p = (x) => String(x).padStart(2, '0');
-      const path = await saveDialog({ title: 'Back up PrivateI', defaultPath: `privatei-backup-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.json`, filters: [{ name: 'PrivateI backup', extensions: ['json'] }] }).catch((e) => toast(message(e), 'error'));
+      const path = await saveDialog({ title: 'Back up Private-I', defaultPath: `privatei-backup-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.json`, filters: [{ name: 'Private-I backup', extensions: ['json'] }] }).catch((e) => toast(message(e), 'error'));
       if (!path) return;
       await call('export_to', { path });
       toast('Backup saved');
@@ -266,7 +266,7 @@ function renderBackup() {
     section(
       'Backup',
       row('Save a backup', 'All your data except AI keys.', backup),
-      row('Restore or import', 'A PrivateI backup file.', restore),
+      row('Restore or import', 'A Private-I backup file.', restore),
     ),
   );
 }
@@ -305,7 +305,7 @@ async function renderUpdates() {
       btn.disabled = false;
     }
   });
-  fill(els.updates, section('Updates', row('PrivateI', v ? `Version ${v}` : null, btn), st));
+  fill(els.updates, section('Updates', row('Private-I', v ? `Version ${v}` : null, btn), st));
 }
 
 export function openSettings() {

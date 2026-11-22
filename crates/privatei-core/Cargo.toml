@@ -3,7 +3,7 @@ name = "privatei-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "PrivateI core: data, storage, calculations and AI calls. No UI."
+description = "Private-I core: data, storage, calculations and AI calls. No UI."
 
 [features]
 default = []

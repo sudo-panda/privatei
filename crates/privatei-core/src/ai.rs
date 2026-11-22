@@ -280,15 +280,27 @@ fn claude(cfg: &AiConfig, req: &AiRequest) -> Result<Value, AiError> {
         prompt = format!("Use the Read tool to look at the photo of the meal in the file {}. {}", file.display(), prompt);
     }
     let result = (|| {
-        let mut child = Command::new(&bin)
-            .args(claude_args(&prompt, &cfg.claude_model))
-            .current_dir(&dir)
-            .env("PATH", extended_path(&bin))
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| AiError::Failed(format!("couldn't start claude ({e})")))?;
+        // "Text file busy" (ETXTBSY) can happen briefly if the binary was just written
+        // (e.g. mid-update, or a test's fake script); retry a few times before giving up.
+        let mut attempt = 0;
+        let mut child = loop {
+            let spawned = Command::new(&bin)
+                .args(claude_args(&prompt, &cfg.claude_model))
+                .current_dir(&dir)
+                .env("PATH", extended_path(&bin))
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn();
+            match spawned {
+                Err(e) if e.raw_os_error() == Some(26) && attempt < 5 => {
+                    attempt += 1;
+                    std::thread::sleep(Duration::from_millis(50 * attempt));
+                }
+                Err(e) => return Err(AiError::Failed(format!("couldn't start claude ({e})"))),
+                Ok(c) => break c,
+            }
+        };
         let mut out = child.stdout.take().unwrap();
         let mut err = child.stderr.take().unwrap();
         let t_out = std::thread::spawn(move || {

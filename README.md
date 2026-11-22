@@ -1,4 +1,4 @@
-# PrivateI
+# Private-I
 
 A private, light Mac app for tracking food, food stock, medicines and training.
 Everything stays on your Mac. AI is only used for photos, foods the built-in tables
@@ -7,24 +7,28 @@ don't know, and the house-rules chat.
 ## Install (Apple Silicon Mac)
 
 1. Open the latest release: https://github.com/sudo-panda/privatei/releases/latest
-2. Download `PrivateI_<version>_aarch64.dmg`, open it, and drag **PrivateI** into **Applications**.
+2. Download `Private-I_<version>_aarch64.dmg`, open it, and drag **Private-I** into **Applications**.
 3. The app is ad-hoc signed (not notarised), so run this once in Terminal:
 
    ```bash
-   xattr -dr com.apple.quarantine /Applications/PrivateI.app
+   xattr -dr com.apple.quarantine /Applications/Private-I.app
    ```
 
-4. Open PrivateI from Applications.
+4. Open Private-I from Applications.
 
-From v0.4.0 on, PrivateI updates itself: when a new version is out it shows
-“PrivateI x.y.z is available” — press **Install and restart**. You can also check in
+If you installed it before it was renamed, the app file may still be called `PrivateI.app`;
+use that path in the command above, or delete it and install `Private-I.app` fresh (your data
+is kept — it lives under `app.privatei.desktop`, not in the app).
+
+From v0.4.0 on, Private-I updates itself: when a new version is out it shows
+“Private-I x.y.z is available” — press **Install and restart**. You can also check in
 **Settings → Updates**. Updates are signed, and the app only installs builds signed with
 this project's key.
 
 ## First run
 
 - **Settings (gear)** → set your weight, daily kcal target and protein floor.
-- **AI** (optional): PrivateI uses your installed **Claude Code** CLI first (it looks in
+- **AI** (optional): Private-I uses your installed **Claude Code** CLI first (it looks in
   `~/.local/bin`, `~/.claude/local`, `~/.homebrew/bin`, `/opt/homebrew/bin`, `/usr/local/bin`
   and your nvm folders; set "Claude path" if yours is elsewhere). Make sure you have run
   `claude` once in Terminal and logged in. You can add a Gemini key as a fallback.
@@ -49,7 +53,7 @@ switches to the compact phone layout, which the Android app will reuse.
 
 ## Import data
 
-Settings → **Restore / import…** → pick a PrivateI backup (`.json`). The import says how many
+Settings → **Restore / import…** → pick a Private-I backup (`.json`). The import says how many
 records it brought in. Importing again updates the same records rather than duplicating them.
 
 ## Backup

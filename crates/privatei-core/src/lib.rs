@@ -1,4 +1,4 @@
-//! PrivateI core: data, storage, calculations and AI calls.
+//! Private-I core: data, storage, calculations and AI calls.
 //!
 //! Pure Rust, no UI and no Tauri, so the same library can serve the Mac app
 //! today and an Android or iPhone app later. Every number the UI shows is

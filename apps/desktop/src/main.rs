@@ -1,4 +1,4 @@
-//! PrivateI desktop: thin Tauri commands. Every calculation lives in privatei-core.
+//! Private-I desktop: thin Tauri commands. Every calculation lives in privatei-core.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use privatei_core::ai::{self, RuleChange};
@@ -331,7 +331,7 @@ fn main() {
             std::fs::create_dir_all(&cache)?;
             let core = Core::open(&data, &cache, &device_id(&data)).map_err(std::io::Error::other)?;
             if core.store.skipped > 0 {
-                eprintln!("PrivateI: skipped {} unreadable rows at startup", core.store.skipped);
+                eprintln!("Private-I: skipped {} unreadable rows at startup", core.store.skipped);
             }
             app.manage(AppState(Mutex::new(core)));
             Ok(())
@@ -388,5 +388,5 @@ fn main() {
             import_from,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running PrivateI");
+        .expect("error while running Private-I");
 }

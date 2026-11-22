@@ -41,23 +41,23 @@ jobs:
           tauriScript: npx tauri
           args: --target aarch64-apple-darwin
           tagName: v__VERSION__
-          releaseName: PrivateI v__VERSION__
+          releaseName: Private-I v__VERSION__
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
           releaseBody: |
-            PrivateI for Macs with Apple Silicon (M1 or newer).
+            Private-I for Macs with Apple Silicon (M1 or newer).
 
             **Install**
-            1. Download `PrivateI_<version>_aarch64.dmg` below and open it.
-            2. Drag **PrivateI** into **Applications**.
+            1. Download `Private-I_<version>_aarch64.dmg` below and open it.
+            2. Drag **Private-I** into **Applications**.
             3. The app is ad-hoc signed, not notarised, so run this once in Terminal:
 
                ```
-               xattr -dr com.apple.quarantine /Applications/PrivateI.app
+               xattr -dr com.apple.quarantine /Applications/Private-I.app
                ```
-            4. Open PrivateI from Applications.
+            4. Open Private-I from Applications.
 
-            From v0.4.0 on, PrivateI checks for updates itself and installs them when you say so.
+            From v0.4.0 on, Private-I checks for updates itself and installs them when you say so.
 
             Your data stays on your Mac (in `~/Library/Application Support/app.privatei.desktop`).

@@ -3,7 +3,7 @@ name = "privatei-desktop"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "PrivateI for macOS: thin Tauri commands over privatei-core"
+description = "Private-I for macOS: thin Tauri commands over privatei-core"
 
 [[bin]]
 name = "privatei"

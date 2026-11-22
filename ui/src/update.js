@@ -38,7 +38,7 @@ export async function checkOnLaunch() {
     'div',
     { class: 'card update-banner', role: 'status', id: 'update-banner' },
     h('div', { class: 'row spread wrap' },
-      h('span', { class: 'grow', text: `PrivateI ${update.version} is available.` }),
+      h('span', { class: 'grow', text: `Private-I ${update.version} is available.` }),
       h('div', { class: 'row' }, h('button', { type: 'button', class: 'ghost', onclick: () => banner.remove() }, 'Later'), btn)),
   );
   btn.addEventListener('click', async () => {

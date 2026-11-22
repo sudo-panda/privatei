@@ -65,10 +65,10 @@ fn import_coll<T: Doc>(store: &mut Store, docs: &Map<String, Value>, fixed_id: O
 /// Import a backup. Validates the format, skips unknown collections, non-object docs
 /// and `_local`/`local`. Returns how many records were imported.
 pub fn import(store: &mut Store, text: &str) -> Result<usize, String> {
-    let v: Value = serde_json::from_str(text).map_err(|_| "That file isn't a PrivateI backup (not valid JSON).".to_string())?;
+    let v: Value = serde_json::from_str(text).map_err(|_| "That file isn't a Private-I backup (not valid JSON).".to_string())?;
     let format = v.get("format").and_then(Value::as_str).unwrap_or("");
     if format != FORMAT && format != LEGACY_FORMAT {
-        return Err("That file isn't a PrivateI backup.".into());
+        return Err("That file isn't a Private-I backup.".into());
     }
     match v.get("version").and_then(Value::as_i64) {
         Some(1) => {}
