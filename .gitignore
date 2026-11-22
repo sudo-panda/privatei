@@ -10,3 +10,5 @@ ui/playwright-report/
 *privatei*.json
 !tests/fixtures/*.json
 apps/desktop/gen/
+test-results/
+playwright-report/

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/privatei-core"]
+members = ["crates/privatei-core", "apps/desktop"]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,3 +13,8 @@ opt-level = "s"
 codegen-units = 1
 strip = true
 panic = "abort"
+
+# Build scripts and proc macros run on the host; stripping their dylibs breaks them on macOS.
+[profile.release.build-override]
+strip = false
+debug = false

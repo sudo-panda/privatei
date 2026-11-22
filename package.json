@@ -1,0 +1,25 @@
+{
+  "name": "privatei",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config ui/vite.config.js",
+    "build:ui": "vite build --config ui/vite.config.js",
+    "build:mock": "vite build --config ui/vite.config.js --mode mock",
+    "test:ui": "npm run build:mock && playwright test --config ui/playwright.config.js",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@fontsource/archivo": "5.3.0",
+    "@fontsource/roboto-mono": "5.3.0",
+    "@fontsource/source-sans-3": "5.3.1",
+    "@tauri-apps/api": "2.12.5",
+    "@tauri-apps/plugin-dialog": "2.8.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "@tauri-apps/cli": "2.12.6",
+    "vite": "8.3.8"
+  }
+}
