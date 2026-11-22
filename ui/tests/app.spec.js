@@ -32,8 +32,15 @@ test.describe('Today', () => {
     await expect(page.getByTestId('kcal')).toHaveText('374');
     await expect(page.getByRole('button', { name: "Copy yesterday's food" })).toHaveCount(0);
     // Delete a row
-    await page.getByLabel('Delete Skyr · 200 g').click();
-    await expect(page.getByTestId('kcal')).toHaveText('248');
+    // Tap a row: one editor with Save and Delete.
+    await page.getByLabel('Edit Chicken breast · 150 g').click();
+    await page.locator('#ed-grams').fill('300');
+    await expect(page.locator('#ed-kcal')).toHaveValue('496');
+    await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByTestId('kcal')).toHaveText('622');
+    await page.getByLabel('Edit Skyr · 200 g').click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByTestId('kcal')).toHaveText('496');
   });
 
   test('add training with estimate, burn toggle and paste import', async ({ page }) => {
@@ -418,4 +425,39 @@ test('Desktop layout: sidebar, columns, shortcuts, no sideways scroll', async ({
   const dlg = await page.locator('.sheet').boundingBox();
   expect(dlg.y).toBeGreaterThan(10); // centered dialog, not a bottom sheet
   expect(dlg.y + dlg.height).toBeLessThan(800 - 10);
+});
+
+test('New layout: plan board, edit sheets, charts and insights', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=rich&layout=new&hhmm=13:10');
+  await expect(page.locator('#title')).toHaveText('Log');
+  await expect(page.getByTestId('fiber')).toBeVisible();
+  await expect(page.locator('.micro-row')).toHaveCount(0); // vitamins live in History
+  // Plan: upcoming days only, tap a meal to edit
+  await tab(page, 'plan').click();
+  const today = page.locator('.plan-day').first();
+  await expect(today).toContainText('Today');
+  await today.getByLabel('Edit Tofu bowl').click();
+  await page.locator('#pm-kcal').fill('600');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+  await expect(today).toContainText('600');
+  await today.getByLabel('Edit Tofu bowl').click();
+  await page.getByRole('button', { name: 'Remove from plan' }).click();
+  await expect(today).not.toContainText('Tofu bowl');
+  await today.getByLabel(/Add snack on Today/).click();
+  await page.locator('#pm-name').fill('Banana');
+  await expect(page.locator('#pm-kcal')).toHaveValue('107');
+  await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click();
+  await expect(today).toContainText('Banana');
+  // Training: edit a session
+  await tab(page, 'training').click();
+  await page.locator('#screen-training [aria-label^="Edit "]').first().click();
+  await page.locator('#tr-mins').fill('90');
+  await page.getByRole('button', { name: 'Save training' }).click();
+  await expect(page.locator('.card[aria-label="Training log"]')).toContainText('90 min');
+  // History: insights and charts
+  await tab(page, 'history').click();
+  await expect(page.locator('.insights .insight').first()).toContainText('Needs attention');
+  await expect(page.locator('#screen-history .chart svg')).toHaveCount(4);
+  await expect(page.locator('.card[aria-label="Vitamins and minerals"] .pct-row')).toHaveCount(5);
 });

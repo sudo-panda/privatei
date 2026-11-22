@@ -503,3 +503,62 @@ fn settings_fiber_floor() {
     c.save_settings(Settings { fiber_floor: 35.0, ..Default::default() }).unwrap();
     assert_eq!(c.day("2026-11-22").unwrap().fiber_floor, 35.0);
 }
+
+#[test]
+fn edit_log_plan_and_training() {
+    let mut c = core("2026-11-22", "12:00");
+    let id = log(&mut c, "2026-11-22", "Egg", 79.0, 7.0);
+    let edit = |name: &str, kcal: f64| LogInput {
+        meal: "Dinner".into(),
+        name: name.into(),
+        grams: Some(110.0),
+        kcal,
+        prot: 14.0,
+        est: false,
+        fiber: Some(0.0),
+        micros: None,
+    };
+    c.update_log(&id, edit("Two eggs", 157.0)).unwrap();
+    let d = c.day("2026-11-22").unwrap();
+    assert_eq!((d.kcal, d.meals[0].meal.as_str(), d.meals[0].rows[0].name.as_str()), (157.0, "Dinner", "Two eggs"));
+    assert!(c.update_log(&id, edit("", 1.0)).is_err());
+    assert!(c.update_log("nope", edit("x", 10.0)).is_err());
+
+    // A ticked plan meal and its log row stay in step both ways.
+    c.set_plan("2026-11-22", vec![PlanMeal { slot: "Lunch".into(), name: "Bowl".into(), kcal: 500.0, prot: 30.0, ..Default::default() }])
+        .unwrap();
+    c.toggle_plan("2026-11-22", 0).unwrap();
+    c.update_plan_meal(
+        "2026-11-22",
+        0,
+        PlanMeal { slot: "Lunch".into(), name: "Big bowl".into(), kcal: 700.0, prot: 40.0, ..Default::default() },
+    )
+    .unwrap();
+    let d = c.day("2026-11-22").unwrap();
+    assert!(d.plan[0].done, "tick kept");
+    assert_eq!(d.kcal, 857.0);
+    let lid = c.store.get::<Plan>("2026-11-22").unwrap().meals[0].log_id.clone().unwrap();
+    c.update_log(
+        &lid,
+        LogInput {
+            meal: "Lunch".into(),
+            name: "Huge bowl".into(),
+            grams: None,
+            kcal: 900.0,
+            prot: 50.0,
+            est: false,
+            fiber: None,
+            micros: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(c.day("2026-11-22").unwrap().plan[0].name, "Huge bowl");
+
+    let w = c.add_workout("2026-11-22", "run", 30.0, None, "").unwrap();
+    c.update_workout(&w, "cycle", 60.0, Some(500.0), "Spin").unwrap();
+    let d = c.day("2026-11-22").unwrap();
+    assert_eq!(
+        (d.workouts[0].kind.as_str(), d.workouts[0].mins, d.workouts[0].kcal, d.workouts[0].name.as_str()),
+        ("cycle", 60.0, 500.0, "Spin")
+    );
+}

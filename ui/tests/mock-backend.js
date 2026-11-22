@@ -163,7 +163,7 @@ function getDay({ date }) {
     g.kcal += l.kcal; g.prot += l.prot; kcal += l.kcal; prot += l.prot;
     if (l.fiber != null) { fiber += l.fiber; fiberKnown = true; }
     if (l.micros) { microsKnown = true; for (const k in l.micros) msum[k] = (msum[k] || 0) + l.micros[k]; }
-    g.rows.push({ id: lid, name: l.name, grams: l.grams, kcal: l.kcal, prot: l.prot, est: l.est, fromPlan: ids.has(lid) });
+    g.rows.push({ id: lid, name: l.name, grams: l.grams, kcal: l.kcal, prot: l.prot, fiber: l.fiber ?? null, meal: l.meal, est: l.est, fromPlan: ids.has(lid) });
   }
   const ws = live('workouts').filter(([, w]) => w.date === date);
   const b = ws.reduce((a, [, w]) => a + w.kcal, 0);
@@ -549,6 +549,28 @@ const handlers = {
   },
   get_history: history,
   get_plan_ahead: planAhead,
+  update_log: ({ id: lid, entry }) => {
+    const l = db.log[lid];
+    if (!l) throw 'That entry no longer exists.';
+    if (!entry.name.trim()) throw 'Give the food a name.';
+    if (!(entry.kcal > 0 && entry.kcal < 5000)) throw 'Calories must be above 0 and below 5000.';
+    Object.assign(l, { name: entry.name.trim(), meal: meal(entry.meal), grams: entry.grams, kcal: Math.round(entry.kcal), prot: r1(entry.prot), fiber: entry.fiber ?? null });
+    const p = db.plan[l.date];
+    if (p) for (const m of p.meals) if (m.logId === lid) Object.assign(m, { name: l.name, kcal: l.kcal, prot: l.prot, fiber: l.fiber, slot: l.meal });
+  },
+  update_plan_meal: ({ date, idx, meal: m }) => {
+    const p = db.plan[date];
+    if (!p || !p.meals[idx]) throw "That meal isn't in the plan any more.";
+    const old = p.meals[idx];
+    p.meals[idx] = { ...m, done: old.done, logId: old.logId };
+    if (old.logId && db.log[old.logId]) Object.assign(db.log[old.logId], { name: m.name, kcal: m.kcal, prot: m.prot, fiber: m.fiber ?? null, meal: m.slot });
+  },
+  update_workout: ({ id: wid, kind, mins, kcal, name }) => {
+    const w = db.workouts[wid];
+    if (!w) throw 'That session no longer exists.';
+    if (!(mins > 0 && mins <= 1440)) throw 'Minutes must be between 1 and 1440.';
+    Object.assign(w, { kind, mins, kcal: kcal || burn(kind, mins), name: name || kind[0].toUpperCase() + kind.slice(1) });
+  },
   add_plan_meal: ({ date, meal: m }) => { (db.plan[date] ||= { meals: [] }).meals.push({ ...m, done: false, logId: null }); },
   remove_plan_meal: ({ date, idx }) => { const p = db.plan[date]; if (p) { const [m] = p.meals.splice(idx, 1); if (m?.logId) delete db.log[m.logId]; } },
   training_summary: trainingSummary,

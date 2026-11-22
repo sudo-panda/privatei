@@ -1,6 +1,6 @@
-import { h, fill, iconButton, n0, dayLabel } from '../dom.js';
+import { h, fill, n0, dayLabel } from '../dom.js';
 import { call } from '../api.js';
-import { state, changed } from '../state.js';
+import { state } from '../state.js';
 import { openTraining } from './today.js';
 import { barChart } from '../charts.js';
 
@@ -29,10 +29,10 @@ export function trainingPanel() {
           ? rows.flatMap((w) => {
               const head = w.date !== last ? h('div', { class: 'item list-date' }, h('h3', { text: dayLabel(w.date, state.today) })) : null;
               last = w.date;
-              return [head, h('div', { class: 'item' },
+              return [head, h('button', { type: 'button', class: 'item ghost row-edit', 'aria-label': `Edit ${w.name}`, onclick: () => openTraining(w) },
                 h('span', { class: 'name' }, h('div', { text: w.name }), h('div', { class: 'meta', text: `${KIND[w.kind] || w.kind} · ${n0(w.mins)} min` })),
                 h('span', { class: 'num small', text: `${n0(w.kcal)} kcal` }),
-                iconButton('trash', `Delete ${w.name}`, async () => { await call('delete_workout', { id: w.id }); changed(); }))];
+                h('span', { class: 'edit-hint', 'aria-hidden': 'true', text: 'Edit' }))];
             })
           : h('p', { class: 'muted', text: 'No training logged yet.' }),
       );

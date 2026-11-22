@@ -85,24 +85,25 @@ function dayCard(d, p) {
         h('div', { class: 'row spread' },
           h('span', { class: 'slot-name', text: slot }),
           iconButton('plus', `Add ${slot.toLowerCase()} on ${title(d)}`, () => editMeal(d, slot))),
-        meals.map((m) => h('div', { class: 'plan-meal' },
+        meals.map((m) => h('button', { type: 'button', class: 'plan-meal ghost row-edit', 'aria-label': `Edit ${m.name}`, onclick: () => editMeal(d, slot, m) },
           h('span', { class: 'name' }, h('span', { text: m.name }), m.done ? h('span', { class: 'badge good', text: 'eaten' }) : null),
           h('span', { class: 'num small muted', text: `${n0(m.kcal)} · ${n1(m.prot)} g` }),
-          iconButton('trash', `Remove ${m.name}`, async () => { await call('remove_plan_meal', { date: d.date, idx: m.idx }); refresh(); }))));
+          h('span', { class: 'edit-hint', 'aria-hidden': 'true', text: 'Edit' }))));
     })),
   );
 }
 
-function editMeal(d, slot) {
-  openSheet(`Plan ${slot.toLowerCase()} · ${title(d)}`, (body, close) => {
+/** Add a meal to a slot, or edit/delete `existing`. */
+function editMeal(d, slot, existing = null) {
+  openSheet(existing ? `Edit ${existing.name}` : `Plan ${slot.toLowerCase()} · ${title(d)}`, (body, close) => {
     let s = slot;
-    const name = h('input', { type: 'text', id: 'pm-name', maxlength: 80, list: 'food-names', 'aria-label': 'Meal', placeholder: 'e.g. Tofu bowl' });
-    const kcal = h('input', { type: 'number', id: 'pm-kcal', min: 0, max: 5000, 'aria-label': 'kcal' });
-    const prot = h('input', { type: 'number', id: 'pm-prot', min: 0, max: 500, 'aria-label': 'Protein g' });
-    const fiber = h('input', { type: 'number', id: 'pm-fiber', min: 0, max: 300, 'aria-label': 'Fiber g' });
+    const name = h('input', { type: 'text', id: 'pm-name', maxlength: 80, list: 'food-names', 'aria-label': 'Meal', placeholder: 'e.g. Tofu bowl', value: existing ? existing.name : '' });
+    const kcal = h('input', { type: 'number', id: 'pm-kcal', min: 0, max: 5000, 'aria-label': 'kcal', value: existing ? existing.kcal : '' });
+    const prot = h('input', { type: 'number', id: 'pm-prot', min: 0, max: 500, 'aria-label': 'Protein g', value: existing ? existing.prot : '' });
+    const fiber = h('input', { type: 'number', id: 'pm-fiber', min: 0, max: 300, 'aria-label': 'Fiber g', value: existing && existing.fiber != null ? existing.fiber : '' });
     const hint = h('div', { class: 'small muted' });
     const err = h('div', { class: 'error', role: 'alert' });
-    let edited = false;
+    let edited = !!existing;
     for (const i of [kcal, prot, fiber]) i.addEventListener('input', () => (edited = true));
     name.addEventListener('input', async () => {
       const q = name.value.trim() ? await quiet('quick_fill', { name: name.value, grams: null }).catch(() => null) : null;
@@ -128,15 +129,20 @@ function editMeal(d, slot) {
           if (!name.value.trim()) return (err.textContent = 'Name the meal.');
           if (!(k > 0 && k < 5000)) return (err.textContent = 'kcal must be above 0 and below 5000.');
           if (!(pr >= 0 && pr <= 500)) return (err.textContent = 'Protein must be between 0 and 500 g.');
+          const meal = { slot: s, name: name.value.trim(), kcal: k, prot: pr, fiber: fiber.value === '' ? null : Number(fiber.value), done: false };
           try {
-            await quiet('add_plan_meal', { date: d.date, meal: { slot: s, name: name.value.trim(), kcal: k, prot: pr, fiber: fiber.value === '' ? null : Number(fiber.value), done: false } });
+            if (existing) await quiet('update_plan_meal', { date: d.date, idx: existing.idx, meal });
+            else await quiet('add_plan_meal', { date: d.date, meal });
           } catch (e) {
             return (err.textContent = message(e));
           }
           close();
           refresh();
         },
-      }, 'Add to plan'),
+      }, existing ? 'Save' : 'Add to plan'),
+      existing
+        ? h('button', { type: 'button', class: 'danger', onclick: async () => { await call('remove_plan_meal', { date: d.date, idx: existing.idx }); toast('Removed from the plan'); close(); refresh(); } }, 'Remove from plan')
+        : null,
     );
   });
 }

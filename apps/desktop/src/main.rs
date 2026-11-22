@@ -41,6 +41,21 @@ fn add_log(s: State<AppState>, date: String, entry: LogInput) -> R<String> {
 }
 
 #[tauri::command]
+fn update_log(s: State<AppState>, id: String, entry: LogInput) -> R<()> {
+    with(&s, |c| c.update_log(&id, entry))
+}
+
+#[tauri::command]
+fn update_plan_meal(s: State<AppState>, date: String, idx: usize, meal: PlanMeal) -> R<()> {
+    with(&s, |c| c.update_plan_meal(&date, idx, meal))
+}
+
+#[tauri::command]
+fn update_workout(s: State<AppState>, id: String, kind: String, mins: f64, kcal: Option<f64>, name: String) -> R<()> {
+    with(&s, |c| c.update_workout(&id, &kind, mins, kcal, &name))
+}
+
+#[tauri::command]
 fn save_items(s: State<AppState>, date: String, items: Vec<Item>) -> R<usize> {
     with(&s, |c| c.save_items(&date, items))
 }
@@ -366,6 +381,9 @@ fn main() {
             get_day,
             add_log,
             save_items,
+            update_log,
+            update_plan_meal,
+            update_workout,
             delete_log,
             toggle_plan,
             set_plan,

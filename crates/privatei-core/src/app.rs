@@ -39,6 +39,8 @@ pub struct LogRow {
     pub grams: Option<f64>,
     pub kcal: f64,
     pub prot: f64,
+    pub fiber: Option<f64>,
+    pub meal: String,
     pub est: bool,
     pub from_plan: bool,
 }
@@ -672,6 +674,8 @@ impl Core {
                 grams: l.grams,
                 kcal: l.kcal,
                 prot: l.prot,
+                fiber: l.fiber,
+                meal: l.meal.clone(),
                 est: l.est,
                 from_plan: plan_ids.contains(id),
             });
@@ -790,6 +794,68 @@ impl Core {
         };
         self.store.put(&id, log)?;
         Ok(id)
+    }
+
+    /// Edit a logged food. Keeps its date and time; a ticked plan meal follows the edit.
+    pub fn update_log(&mut self, id: &str, input: LogInput) -> Result<()> {
+        let mut l = self.store.get::<Log>(id).cloned().ok_or("That entry no longer exists.")?;
+        let name = ai::clip(&input.name, 80);
+        if name.is_empty() {
+            return Err("Give the food a name.".into());
+        }
+        if !(input.kcal > 0.0 && input.kcal < 5000.0) {
+            return Err("Calories must be above 0 and below 5000.".into());
+        }
+        if !(0.0..=500.0).contains(&input.prot) {
+            return Err("Protein must be between 0 and 500 g.".into());
+        }
+        let grams = input.grams.filter(|g| *g > 0.0 && g.is_finite());
+        // Scale known micros when only the amount changed.
+        if let (Some(old), Some(new), Some(m)) = (l.grams, grams, l.micros) {
+            if old > 0.0 && input.micros.is_none() {
+                l.micros = Some(m.scale(new / old).rounded());
+            }
+        }
+        if input.micros.is_some() {
+            l.micros = input.micros.map(|m| m.clamped().rounded());
+        }
+        l.name = name;
+        l.meal = valid_meal(&input.meal, &self.hhmm());
+        l.grams = grams;
+        l.kcal = input.kcal.round();
+        l.prot = round1(input.prot);
+        l.fiber = input.fiber.filter(|f| f.is_finite() && *f >= 0.0).map(|f| round1(f.min(300.0)));
+        l.est = input.est;
+        let date = l.date.clone();
+        let (name, kcal, prot, fiber, slot) = (l.name.clone(), l.kcal, l.prot, l.fiber, l.meal.clone());
+        self.store.put(id, l)?;
+        if let Some(mut plan) = self.store.get::<Plan>(&date).cloned() {
+            let mut changed = false;
+            for m in plan.meals.iter_mut().filter(|m| m.log_id.as_deref() == Some(id)) {
+                (m.name, m.kcal, m.prot, m.fiber, m.slot) = (name.clone(), kcal, prot, fiber, slot.clone());
+                changed = true;
+            }
+            if changed {
+                self.store.put(&date, plan)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Edit one planned meal; if it was already ticked, its log row follows.
+    pub fn update_plan_meal(&mut self, date: &str, idx: usize, meal: PlanMeal) -> Result<()> {
+        let mut meals = self.store.get::<Plan>(date).map(|p| p.meals.clone()).ok_or("There's no plan for that day.")?;
+        let old = meals.get(idx).cloned().ok_or("That meal isn't in the plan any more.")?;
+        meals[idx] = PlanMeal { done: old.done, log_id: old.log_id.clone(), ..meal };
+        self.set_plan(date, meals)?;
+        if let Some(lid) = old.log_id {
+            if let Some(mut l) = self.store.get::<Log>(&lid).cloned() {
+                let m = &self.store.get::<Plan>(date).unwrap().meals[idx];
+                (l.name, l.kcal, l.prot, l.fiber, l.meal) = (m.name.clone(), m.kcal, m.prot, m.fiber, m.slot.clone());
+                self.store.put(&lid, l)?;
+            }
+        }
+        Ok(())
     }
 
     /// Save a draft's items (already cleaned). Returns how many were saved.
@@ -1277,6 +1343,25 @@ impl Core {
                 name: w.name.clone(),
             })
             .collect()
+    }
+
+    /// Edit a training session (date stays).
+    pub fn update_workout(&mut self, id: &str, kind: &str, mins: f64, kcal: Option<f64>, name: &str) -> Result<()> {
+        let mut w = self.store.get::<Workout>(id).cloned().ok_or("That session no longer exists.")?;
+        if !(mins > 0.0 && mins <= 1440.0) {
+            return Err("Minutes must be between 1 and 1440.".into());
+        }
+        let kind = if KINDS.contains(&kind) { kind } else { "other" };
+        w.kcal = match kcal.filter(|k| *k > 0.0) {
+            Some(k) if k > training::MAX_SESSION_KCAL => return Err("That's more than 5000 kcal for one session.".into()),
+            Some(k) => k.round(),
+            None => self.burn_estimate(kind, mins),
+        };
+        w.kind = kind.into();
+        w.mins = mins.round();
+        let n = ai::clip(name, 80);
+        w.name = if n.is_empty() { food::capitalize(kind) } else { n };
+        self.store.put(id, w)
     }
 
     pub fn delete_workout(&mut self, id: &str) -> Result<()> {

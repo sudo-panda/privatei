@@ -96,11 +96,6 @@ function render() {
     h('div', { class: 'row spread' }, h('h3', { text: 'Fiber' }), h('span', { class: `small ${d.fiberMet ? 'ok' : 'muted'}`, text: !d.fiberKnown ? 'no fiber data yet' : d.fiberMet ? 'Floor reached' : `${n1(d.fiberFloor - d.fiber)} g to go` })),
     h('div', { class: 'row' }, h('span', { class: 'big', 'data-testid': 'fiber', text: n1(d.fiber) }), h('span', { class: 'muted num', text: `/ ${n0(d.fiberFloor)} g` })),
     h('div', { class: `bar fiber ${d.fiberMet ? 'good' : ''}`, role: 'progressbar', 'aria-label': 'Fiber against floor', 'aria-valuemin': 0, 'aria-valuemax': n0(d.fiberFloor), 'aria-valuenow': n1(d.fiber) }, h('span', { style: `width:${Math.min(100, (d.fiber / Math.max(1, d.fiberFloor)) * 100)}%` })),
-    d.micros.some((m) => m.pct !== null)
-      ? h('div', { class: 'micro-row', 'aria-label': 'Vitamins and minerals today' }, d.micros.map((m) =>
-          h('span', { class: `micro ${m.pct >= 100 ? 'ok' : m.pct >= 50 ? 'mid' : 'short'}`, title: `${m.label}: ${n1(m.amount)} ${m.unit} of ${m.reference} ${m.unit}` },
-            h('span', { class: 'micro-name', text: m.label.replace('Vitamin ', 'Vit ') }), h('b', { class: 'num', text: `${n0(m.pct)}%` }))))
-      : null,
     d.burn > 0
       ? h(
           'label',
@@ -161,15 +156,11 @@ function render() {
       h('div', { class: 'row spread', style: 'padding-top:6px' }, h('h3', { text: g.meal }), h('span', { class: 'num small muted', text: `${n0(g.kcal)} kcal · ${n1(g.prot)} g` })),
       g.rows.map((r) =>
         h(
-          'div',
-          { class: 'item', 'data-log': r.id },
+          'button',
+          { type: 'button', class: 'item ghost row-edit', 'data-log': r.id, 'aria-label': `Edit ${r.name}`, onclick: () => openFoodEditor(r) },
           h('span', { class: 'name' }, h('div', { text: r.name }), r.est ? h('div', { class: 'meta', text: 'estimated weight' }) : null),
           h('span', { class: 'num small', text: `${n0(r.kcal)} · ${n1(r.prot)} g` }),
-          iconButton('trash', `Delete ${r.name}`, async () => {
-            await call('delete_log', { id: r.id });
-            toast('Deleted');
-            refresh();
-          }),
+          h('span', { class: 'edit-hint', 'aria-hidden': 'true', text: 'Edit' }),
         ),
       ),
     ),
@@ -225,21 +216,18 @@ function render() {
   // Training
   fill(
     els.training,
-    h('div', { class: 'card-head' }, h('h2', { text: 'Training' }), h('button', { type: 'button', class: 'ghost', onclick: openTraining, disabled: d.date > d.today }, icon('add'), 'Add training')),
+    h('div', { class: 'card-head' }, h('h2', { text: 'Training' }), h('button', { type: 'button', class: 'ghost', onclick: () => openTraining(), disabled: d.date > d.today }, icon('add'), 'Add training')),
     d.workouts.length
       ? h(
           'div',
           { class: 'list' },
           d.workouts.map((w) =>
             h(
-              'div',
-              { class: 'item' },
+              'button',
+              { type: 'button', class: 'item ghost row-edit', 'aria-label': `Edit ${w.name}`, onclick: () => openTraining(w) },
               h('span', { class: 'name' }, h('div', { text: w.name }), h('div', { class: 'meta', text: `${KINDS.find((k) => k[0] === w.kind)?.[1] || w.kind} · ${n0(w.mins)} min` })),
               h('span', { class: 'num small', text: `${n0(w.kcal)} kcal` }),
-              iconButton('trash', `Delete ${w.name}`, async () => {
-                await call('delete_workout', { id: w.id });
-                refresh();
-              }),
+              h('span', { class: 'edit-hint', 'aria-hidden': 'true', text: 'Edit' }),
             ),
           ),
         )
@@ -247,13 +235,14 @@ function render() {
   );
 }
 
-export function openTraining() {
+/** Add a session, or edit `w` ({ id, kind, mins, kcal, name }) with Save and Delete. */
+export function openTraining(w = null) {
   const date = state.date;
-  openSheet('Add training', (body, close) => {
-    let kind = 'gym';
-    const mins = h('input', { type: 'number', inputmode: 'numeric', min: 1, max: 1440, id: 'tr-mins', 'aria-label': 'Minutes' });
-    const kcal = h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 5000, id: 'tr-kcal', 'aria-label': 'Calories (optional)' });
-    const note = h('input', { type: 'text', maxlength: 80, id: 'tr-note', 'aria-label': 'Note' });
+  openSheet(w ? 'Edit training' : 'Add training', (body, close) => {
+    let kind = w ? w.kind : 'gym';
+    const mins = h('input', { type: 'number', inputmode: 'numeric', min: 1, max: 1440, id: 'tr-mins', 'aria-label': 'Minutes', value: w ? w.mins : '' });
+    const kcal = h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 5000, id: 'tr-kcal', 'aria-label': 'Calories (optional)', value: w ? w.kcal : '' });
+    const note = h('input', { type: 'text', maxlength: 80, id: 'tr-note', 'aria-label': 'Note', value: w ? w.name : '' });
     const est = h('div', { class: 'small muted', 'data-testid': 'burn-estimate' });
     const err = h('div', { class: 'error', role: 'alert' });
     const update = async () => {
@@ -287,7 +276,8 @@ export function openTraining() {
           const k = kcal.value === '' ? null : Number(kcal.value);
           if (k !== null && !(k >= 0 && k <= 5000)) return (err.textContent = 'kcal must be between 0 and 5000.');
           try {
-            await quiet('add_workout', { date, kind, mins: m, kcal: k, name: note.value });
+            if (w) await quiet('update_workout', { id: w.id, kind, mins: m, kcal: k, name: note.value });
+            else await quiet('add_workout', { date, kind, mins: m, kcal: k, name: note.value });
             toast('Training saved');
             close();
             changed();
@@ -296,7 +286,9 @@ export function openTraining() {
           }
         },
       }, 'Save training'),
-      h('details', {},
+      w
+        ? h('button', { type: 'button', class: 'danger', onclick: async () => { await call('delete_workout', { id: w.id }); toast('Deleted'); close(); changed(); } }, 'Delete session')
+        : h('details', {},
         h('summary', { class: 'small', style: 'font-weight:600' }, 'Paste from another app'),
         h('div', { class: 'small muted', text: 'One session per line: date, sport, minutes (or H:MM), kcal. Separate with commas, semicolons or tabs.' }),
         paste,
@@ -312,6 +304,58 @@ export function openTraining() {
           },
         }, 'Import pasted sessions'),
       ),
+    );
+  });
+}
+
+/** Edit or delete a logged food. */
+export function openFoodEditor(r) {
+  openSheet('Edit food', (body, close) => {
+    let meal = r.meal;
+    const name = h('input', { type: 'text', id: 'ed-name', maxlength: 80, value: r.name, 'aria-label': 'Food name' });
+    const grams = h('input', { type: 'number', id: 'ed-grams', min: 0, value: r.grams ?? '', 'aria-label': 'Grams' });
+    const kcal = h('input', { type: 'number', id: 'ed-kcal', min: 0, max: 5000, value: r.kcal, 'aria-label': 'kcal' });
+    const prot = h('input', { type: 'number', id: 'ed-prot', min: 0, max: 500, value: r.prot, 'aria-label': 'Protein g' });
+    const fiber = h('input', { type: 'number', id: 'ed-fiber', min: 0, max: 300, value: r.fiber ?? '', 'aria-label': 'Fiber g' });
+    const err = h('div', { class: 'error', role: 'alert' });
+    // Changing the grams scales the numbers, like a food scale.
+    const base = { g: Number(r.grams) || 0, kcal: r.kcal, prot: r.prot, fiber: r.fiber };
+    grams.addEventListener('input', () => {
+      const g = Number(grams.value);
+      if (!(base.g > 0 && g > 0)) return;
+      const f = g / base.g;
+      kcal.value = Math.round(base.kcal * f);
+      prot.value = Math.round(base.prot * f * 10) / 10;
+      if (base.fiber != null) fiber.value = Math.round(base.fiber * f * 10) / 10;
+    });
+    body.append(
+      h('label', { class: 'field' }, 'Name', name),
+      h('div', { class: 'grid2' }, h('label', { class: 'field' }, 'Grams', grams), h('label', { class: 'field' }, 'kcal', kcal)),
+      h('div', { class: 'grid2' }, h('label', { class: 'field' }, 'Protein g', prot), h('label', { class: 'field' }, 'Fiber g', fiber)),
+      h('div', { class: 'field' }, h('span', { text: 'Meal' }), chipGroup(['Breakfast', 'Lunch', 'Snack', 'Dinner'].map((m) => [m, m]), meal, (v) => (meal = v), 'Meal')),
+      r.fromPlan ? h('p', { class: 'small muted', text: 'This came from your plan; the planned meal changes too.' }) : null,
+      err,
+      h('div', { class: 'actions' },
+        h('button', { type: 'button', class: 'danger', onclick: async () => { await call('delete_log', { id: r.id }); toast('Deleted'); close(); changed(); } }, 'Delete'),
+        h('button', {
+          type: 'button',
+          class: 'primary',
+          onclick: async () => {
+            err.textContent = '';
+            const k = Number(kcal.value), p = Number(prot.value || 0);
+            if (!name.value.trim()) return (err.textContent = 'Give the food a name.');
+            if (!(k > 0 && k < 5000)) return (err.textContent = 'kcal must be above 0 and below 5000.');
+            if (!(p >= 0 && p <= 500)) return (err.textContent = 'Protein must be between 0 and 500 g.');
+            try {
+              await quiet('update_log', { id: r.id, entry: { meal, name: name.value.trim(), grams: grams.value === '' ? null : Number(grams.value), kcal: k, prot: p, est: r.est, fiber: fiber.value === '' ? null : Number(fiber.value) } });
+            } catch (e) {
+              return (err.textContent = message(e));
+            }
+            toast('Saved');
+            close();
+            changed();
+          },
+        }, 'Save')),
     );
   });
 }
