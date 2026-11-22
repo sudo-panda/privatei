@@ -706,3 +706,12 @@ test('Settings targets: each box sits on the same line as its name, hint underne
     }
   }
 });
+
+test('The settings gear is hidden on the Settings page', async ({ page }) => {
+  await open(page, 'seed=demo&layout=new');
+  await expect(page.locator('#open-settings')).toBeVisible();
+  await page.locator('#open-settings').click();
+  await expect(page.locator('#open-settings')).toBeHidden();
+  await tab(page, 'today').click();
+  await expect(page.locator('#open-settings')).toBeVisible();
+});
