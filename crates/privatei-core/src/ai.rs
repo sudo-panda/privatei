@@ -2,7 +2,8 @@
 //! and Gemini over HTTPS. Never an Anthropic API key, never claude.ai endpoints.
 
 use crate::food::{self, Item};
-use crate::model::{meal_for_time, valid_model_name, AiSettings, Micros, Settings, MEALS};
+use crate::model::{meal_for_time, valid_model_name, AiSettings, Settings, MEALS};
+use crate::nutrients;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -485,7 +486,7 @@ pub fn food_prompt(s: &Settings, rules: &str, user_text: &str) -> String {
     let p = s.prot_floor.round() as i64;
     let rules = if rules.trim().is_empty() { "none".to_string() } else { rules.trim().to_string() };
     format!(
-        "You are logging food for a 26-year-old man cutting from {w}kg toward 65kg in Zurich. Targets: ~{k} kcal/day, protein {p}-{p2} g/day (protect protein first), saturated fat under 17 g/day. Never include: quark, tuna, lentils, raw tomato (cooked is fine), lettuce. Edamame only as a garnish, 6-8 beans - it bloats him. Dressings are lemon juice plus Thomy Inferno mustard, never oil. When food was roasted dry and weighed AFTER cooking, use the post-roast concentrated values, not raw. Per 100 g (kcal/protein/fiber): {table}. Mark est:true on any line whose weight you estimated rather than were told. Extra house rules he has set: {rules}. He reports: {said}. Also estimate fiber (g) and, per item, vitamin C (mg), vitamin D (µg), vitamin B12 (µg), iron (mg) and calcium (mg). Return JSON only: {{\"items\":[{{\"name\":string,\"grams\":number|null,\"kcal\":number,\"prot\":number,\"fiber\":number,\"vitC\":number,\"vitD\":number,\"b12\":number,\"iron\":number,\"calcium\":number,\"est\":boolean,\"meal\":\"Breakfast\"|\"Lunch\"|\"Snack\"|\"Dinner\"}}],\"note\":string}}. note is at most one short sentence, or empty. Estimate grams yourself rather than asking.",
+        "You are logging food for a 26-year-old man cutting from {w}kg toward 65kg in Zurich. Targets: ~{k} kcal/day, protein {p}-{p2} g/day (protect protein first), saturated fat under 17 g/day. Never include: quark, tuna, lentils, raw tomato (cooked is fine), lettuce. Edamame only as a garnish, 6-8 beans - it bloats him. Dressings are lemon juice plus Thomy Inferno mustard, never oil. When food was roasted dry and weighed AFTER cooking, use the post-roast concentrated values, not raw. Per 100 g (kcal/protein/fiber): {table}. Mark est:true on any line whose weight you estimated rather than were told. Extra house rules he has set: {rules}. He reports: {said}. For each item also estimate, where you reasonably can, these nutrients for the portion: fiber, carbs, sugar, addedSugar, fat, satFat (g); sodium, potassium, calcium, magnesium, iron, zinc (mg); vitA, folate, b12, vitD, iodine (µg); vitC (mg); caffeine (mg). Leave a key out rather than guessing wildly. Return JSON only: {{\"items\":[{{\"name\":string,\"grams\":number|null,\"kcal\":number,\"prot\":number,\"fiber\":number,\"addedSugar\":number,\"satFat\":number,\"sodium\":number,\"...\":number,\"est\":boolean,\"meal\":\"Breakfast\"|\"Lunch\"|\"Snack\"|\"Dinner\"}}],\"note\":string}}. note is at most one short sentence, or empty. Estimate grams yourself rather than asking.",
         p2 = p + 20,
         table = food::table_text(),
         said = serde_json::to_string(user_text).unwrap_or_default(),
@@ -537,17 +538,9 @@ pub fn clean_food(v: &Value, now_hhmm: &str) -> (Vec<Item>, String) {
                     let meal = i.get("meal").and_then(Value::as_str).filter(|m| MEALS.contains(m)).unwrap_or(guess);
                     let num = |k: &str, max: f64| i.get(k).filter(|v| !v.is_null()).map(|v| clamp(v, max));
                     let fiber = num("fiber", 300.0).map(food::round1);
-                    let has_micros = ["vitC", "vitD", "b12", "iron", "calcium"].iter().any(|k| i.get(*k).is_some_and(|v| !v.is_null()));
-                    let micros = has_micros.then(|| {
-                        Micros {
-                            vit_c: num("vitC", 2000.0).unwrap_or(0.0),
-                            vit_d: num("vitD", 250.0).unwrap_or(0.0),
-                            b12: num("b12", 1000.0).unwrap_or(0.0),
-                            iron: num("iron", 100.0).unwrap_or(0.0),
-                            calcium: num("calcium", 5000.0).unwrap_or(0.0),
-                        }
-                        .rounded()
-                    });
+                    let mut nut = nutrients::from_json(i);
+                    nut.remove("fiber");
+                    let nut = (!nut.is_empty()).then_some(nut);
                     Some(Item {
                         name,
                         grams: grams.map(food::round1),
@@ -556,7 +549,7 @@ pub fn clean_food(v: &Value, now_hhmm: &str) -> (Vec<Item>, String) {
                         est: i.get("est").and_then(Value::as_bool).unwrap_or(true),
                         meal: meal.to_string(),
                         fiber,
-                        micros,
+                        nut,
                     })
                 })
                 .take(30)
@@ -660,10 +653,11 @@ mod tests {
         let (out, _) =
             clean_food(&json!({"items": [{"name": "Dal", "kcal": 400, "prot": 20, "fiber": 12.34, "vitC": 9999, "iron": 3}]}), "08:00");
         assert_eq!(out[0].fiber, Some(12.3));
-        let m = out[0].micros.unwrap();
-        assert_eq!((m.vit_c, m.iron, m.vit_d), (2000.0, 3.0, 0.0));
+        let m = out[0].nut.clone().unwrap();
+        assert_eq!((m["vitC"], m["iron"], m.get("vitD")), (5000.0, 3.0, None));
+        assert!(!m.contains_key("fiber"), "fiber is kept separately");
         let (out, _) = clean_food(&json!({"items": [{"name": "X", "kcal": 1}]}), "08:00");
-        assert_eq!((out[0].fiber, out[0].micros), (None, None));
+        assert_eq!((out[0].fiber, out[0].nut.clone()), (None, None));
     }
 
     #[test]

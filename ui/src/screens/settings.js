@@ -75,8 +75,9 @@ function mount(root) {
   els.ai = h('div');
   els.learned = h('div');
   els.backup = h('div');
+  els.foods = h('div');
   els.updates = h('div');
-  root.append(h('div', { class: 'settings' }, els.targets, els.ai, els.learned, els.backup, els.updates));
+  root.append(h('div', { class: 'settings' }, els.targets, els.foods, els.ai, els.learned, els.backup, els.updates));
 }
 
 async function refresh(opts = {}) {
@@ -87,6 +88,7 @@ async function refresh(opts = {}) {
   renderLearned(await call('learned_foods'));
   renderBackup();
   renderUpdates();
+  renderFoods(await call('food_sources'));
 }
 
 // ---------- Targets (saved as you leave each field) ----------
@@ -237,6 +239,49 @@ function renderLearned(items) {
   };
   draw();
   fill(els.learned, section('Learned foods', list));
+}
+
+// ---------- Food databases ----------
+
+const AVAILABLE = [
+  { id: 'swiss', name: 'Swiss Food Composition Database', what: 'About 1,200 Swiss foods (FSVO). Downloaded from naehrwertdaten.ch, about 1 MB.', command: 'download_swiss' },
+];
+
+function renderFoods(sources, note = null) {
+  const st = status('foods-status');
+  if (note) say(st, note, 'ok');
+  const have = new Map(sources.map((x) => [x.id, x]));
+  const rows = sources.map((x) =>
+    h('div', { class: 'set-row', 'data-source': x.id },
+      h('div', { class: 'set-label' },
+        h('div', { class: 'set-name', text: x.name }),
+        h('div', { class: 'small muted', text: `${x.foods.toLocaleString()} foods · ${x.version}` }),
+        h('details', { class: 'small' }, h('summary', { text: 'Licence and source' }), h('div', { class: 'muted', text: `${x.licence}. ${x.attribution}` }))),
+      h('div', { class: 'set-control' },
+        x.id === 'usda'
+          ? h('span', { class: 'badge good', text: 'Built in' })
+          : h('button', { type: 'button', class: 'ghost danger', onclick: async () => { await call('remove_food_source', { id: x.id }); renderFoods(await call('food_sources')); } }, 'Remove'))));
+  const offers = AVAILABLE.filter((a) => !have.has(a.id)).map((a) => {
+    const btn = h('button', { type: 'button', id: `get-${a.id}` }, 'Download');
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      say(st, `Downloading ${a.name}…`);
+      try {
+        const n = await quiet(a.command);
+        renderFoods(await call('food_sources'), `Added ${n.toLocaleString()} foods.`);
+      } catch (e) {
+        say(st, message(e), 'error');
+        btn.disabled = false;
+      }
+    });
+    return h('div', { class: 'set-row' }, h('div', { class: 'set-label' }, h('div', { class: 'set-name', text: a.name }), h('div', { class: 'small muted', text: a.what })), h('div', { class: 'set-control' }, btn));
+  });
+  fill(
+    els.foods,
+    section('Food databases',
+      h('p', { class: 'small muted set-intro', text: 'Search these when you add food. Everything works offline once downloaded.' }),
+      ...rows, ...offers, st),
+  );
 }
 
 // ---------- Backup ----------

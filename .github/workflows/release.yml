@@ -29,6 +29,12 @@ jobs:
         with:
           key: macos-release
       - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: target/fooddb
+          key: usda-${{ hashFiles('scripts/build-fooddb.sh') }}
+      - name: Build the food database (USDA FoodData Central, public domain)
+        run: npm run build:fooddb
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

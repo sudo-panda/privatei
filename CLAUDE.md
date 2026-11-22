@@ -50,12 +50,28 @@ tests/fixtures/         made-up sample export (never real data)
 - Personal data never goes in git.
 - Add a test for every bug fix.
 
+## Nutrients and food databases
+
+- `nutrients.rs` is the catalog (~40 nutrients: key, label, unit, group, daily reference,
+  target/limit/info, USDA ids, Swiss column). Amounts are a map (`Nut`) keyed by catalog key;
+  **a missing key means unknown, never zero**. `Log.fiber` is kept separately; `Log.nut` has the rest;
+  `Log.food_ref` ("usda:167512") points back to the database entry.
+- `fooddb.rs`: SQLite + FTS5. The app opens the shipped read-only `resources/foods.sqlite`
+  (USDA) plus a writable `foods-user.sqlite` in the data folder for downloads (Swiss).
+- `importers.rs` (feature `import`): USDA CSV and Swiss xlsx (calamine). Build the shipped DB with
+  `npm run build:fooddb` (downloads USDA SR Legacy + Foundation into `target/fooddb`).
+  The Swiss DB is downloaded by the app from naehrwertdaten.ch, not redistributed.
+- Not allowed to ship: India IFCT 2017 (NIN copyright). Open Food Facts is ODbL (share-alike):
+  keep any cache in its own file with attribution.
+- The mock uses `ui/tests/fixtures/usda-sample.json` (public-domain USDA subset) and
+  `catalog.json` (generated from `nutrients.rs`; regenerate if the catalog changes).
+
 ## Tests (run before every commit)
 
 ```bash
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test -p privatei-core --features cli     # unit + integration (fake claude, mock HTTP)
+cargo test -p privatei-core --features cli,import   # unit + integration (fake claude, mock HTTP)
 npm run test:ui                                # Playwright, WebKit + Chromium, mockIPC
 ```
 

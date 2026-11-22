@@ -2,6 +2,7 @@ import { h, fill, iconButton, toast, openSheet, n0, n1, dayLabel, chipGroup } fr
 import { call, quiet, message } from '../api.js';
 import { state } from '../state.js';
 import { planPanel } from './week.js';
+import { foodSearch } from '../foodsearch.js';
 
 const SLOTS = ['Breakfast', 'Lunch', 'Snack', 'Dinner'];
 let els = {};
@@ -114,8 +115,22 @@ function editMeal(d, slot, existing = null) {
         fiber.value = q.fiber === null || q.fiber === undefined ? '' : n1(q.fiber);
       }
     });
+    const search = foodSearch({
+      id: 'plan-food',
+      confirmLabel: 'Use this',
+      onPick: (f, g) => {
+        const k = g / 100;
+        name.value = `${f.name} · ${Math.round(g)} g`;
+        kcal.value = Math.round(f.kcal100 * k);
+        prot.value = Math.round(f.prot100 * k * 10) / 10;
+        fiber.value = f.fiber100 == null ? '' : Math.round(f.fiber100 * k * 10) / 10;
+        edited = true;
+        hint.textContent = `From ${f.sourceName}`;
+      },
+    });
     body.append(
       h('div', { class: 'field' }, h('span', { text: 'Meal' }), chipGroup(SLOTS.map((x) => [x, x]), s, (v) => (s = v), 'Meal')),
+      existing ? null : search,
       h('label', { class: 'field' }, 'What', name),
       h('div', { class: 'grid3' }, h('label', { class: 'field' }, 'kcal', kcal), h('label', { class: 'field' }, 'Protein g', prot), h('label', { class: 'field' }, 'Fiber g', fiber)),
       hint,

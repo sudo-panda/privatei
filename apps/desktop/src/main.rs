@@ -106,6 +106,39 @@ async fn estimate_photo(s: State<'_, AppState>, data: String, ext: String, note:
     with(&s, |c| Ok(c.finish_estimate(pending, Some(answer))))
 }
 
+// ---------- Food database ----------
+
+#[tauri::command]
+fn search_foods(s: State<AppState>, query: String) -> R<Vec<privatei_core::fooddb::DbFood>> {
+    with(&s, |c| Ok(c.search_foods(&query, 30)))
+}
+
+#[tauri::command]
+fn food_detail(s: State<AppState>, reference: String) -> R<Option<privatei_core::fooddb::DbFood>> {
+    with(&s, |c| Ok(c.food_detail(&reference)))
+}
+
+#[tauri::command]
+fn add_food(s: State<AppState>, date: String, meal: String, reference: String, grams: f64) -> R<String> {
+    with(&s, |c| c.add_food(&date, &meal, &reference, grams))
+}
+
+#[tauri::command]
+fn food_sources(s: State<AppState>) -> R<Vec<privatei_core::fooddb::SourceInfo>> {
+    with(&s, |c| Ok(c.food_sources()))
+}
+
+#[tauri::command]
+async fn download_swiss(s: State<'_, AppState>) -> R<usize> {
+    let (bytes, version) = off_thread(privatei_core::importers::download_swiss).await??;
+    with(&s, |c| c.import_swiss(&bytes, &version))
+}
+
+#[tauri::command]
+fn remove_food_source(s: State<AppState>, id: String) -> R<()> {
+    with(&s, |c| c.remove_food_source(&id))
+}
+
 #[tauri::command]
 fn quick_fill(s: State<AppState>, name: String, grams: Option<f64>) -> R<Option<QuickFill>> {
     with(&s, |c| Ok(c.quick(&name, grams)))
@@ -369,7 +402,13 @@ fn main() {
             let cache = app.path().app_cache_dir()?;
             std::fs::create_dir_all(&data)?;
             std::fs::create_dir_all(&cache)?;
-            let core = Core::open(&data, &cache, &device_id(&data)).map_err(std::io::Error::other)?;
+            let mut core = Core::open(&data, &cache, &device_id(&data)).map_err(std::io::Error::other)?;
+            // The shipped USDA database (read-only) plus a writable one for downloads.
+            let bundled = app.path().resolve("resources/foods.sqlite", tauri::path::BaseDirectory::Resource).ok();
+            match privatei_core::fooddb::FoodDb::open(bundled.as_deref(), &data.join("foods-user.sqlite")) {
+                Ok(db) => core.foods = Some(db),
+                Err(e) => eprintln!("Private-I: food database unavailable: {e}"),
+            }
             if core.store.skipped > 0 {
                 eprintln!("Private-I: skipped {} unreadable rows at startup", core.store.skipped);
             }
@@ -392,6 +431,12 @@ fn main() {
             estimate_food,
             estimate_photo,
             quick_fill,
+            search_foods,
+            food_detail,
+            add_food,
+            food_sources,
+            download_swiss,
+            remove_food_source,
             food_names,
             get_meds,
             save_med,

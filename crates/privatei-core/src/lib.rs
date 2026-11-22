@@ -9,8 +9,12 @@ pub mod app;
 pub mod backup;
 pub mod dates;
 pub mod food;
+pub mod fooddb;
+#[cfg(feature = "import")]
+pub mod importers;
 pub mod meds;
 pub mod model;
+pub mod nutrients;
 pub mod store;
 pub mod training;
 

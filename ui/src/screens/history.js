@@ -80,9 +80,21 @@ async function refresh() {
     data: days.map((d) => ({ label: short(d.date), v: d.mins, tone: 'train', tip: `${dayLabel(d.date, state.today)}: ${d.mins ? `${n0(d.mins)} min` : 'no training'}` })),
   });
 
-  const micros = s.micros.some((m) => m.pct !== null)
-    ? pctBars(s.micros.map((m) => ({ label: m.label, value: m.pct || 0, text: `${n0(m.pct)}% · ${n1(m.amount)} ${m.unit}`, tone: m.pct < 60 ? 'short' : m.pct < 100 ? 'mid' : 'ok' })), { title: 'Vitamins and minerals' })
-    : h('p', { class: 'muted small', text: 'No vitamin data yet. Foods logged from now on carry it.' });
+  const groups = ['Carbs', 'Fats', 'Vitamins', 'Minerals', 'Other'];
+  const known = s.nutrients.filter((m) => m.pct !== null && m.kind !== 'info' && m.key !== 'fiber');
+  const nutrients = known.length
+    ? h('div', { class: 'nut-groups' }, groups.map((g) => {
+        const rows = known.filter((m) => m.group === g);
+        if (!rows.length) return null;
+        return h('div', { class: 'nut-group' }, h('h3', { text: g }),
+          pctBars(rows.map((m) => ({
+            label: m.label,
+            value: m.pct,
+            text: `${n0(m.pct)}% · ${n1(m.amount)} ${m.unit}${m.coverage < 0.8 ? ' · partial' : ''}`,
+            tone: m.kind === 'limit' ? (m.pct > 100 ? 'short' : m.pct > 80 ? 'mid' : 'ok') : m.pct < 60 ? 'short' : m.pct < 100 ? 'mid' : 'ok',
+          })), { title: g }));
+      }))
+    : h('p', { class: 'muted small', text: 'No nutrient data yet. Foods you add from the food database carry 30–40 nutrients each.' });
 
   const meds = hist.meds.length
     ? pctBars(hist.meds.map((m) => ({ label: m.name, value: m.due ? (m.taken / m.due) * 100 : 0, text: `${m.taken}/${m.due}`, tone: m.missed === 0 ? 'ok' : m.missed * 5 > m.due ? 'short' : 'mid' })), { max: 100, title: 'Medicines taken' })
@@ -105,7 +117,7 @@ async function refresh() {
     els.body,
     tiles,
     h('div', { class: 'cols' },
-      h('div', { class: 'col' }, insights, h('div', { class: 'card', 'aria-label': 'Vitamins and minerals' }, h('div', { class: 'row spread wrap' }, h('h2', { text: 'Vitamins and minerals' }), h('span', { class: 'small muted', text: 'daily average vs reference · food only' })), micros), h('div', { class: 'card', 'aria-label': 'Medicines taken' }, h('h2', { text: 'Medicines taken' }), meds)),
+      h('div', { class: 'col' }, insights, h('div', { class: 'card', 'aria-label': 'Nutrients' }, h('div', { class: 'row spread wrap' }, h('h2', { text: 'Nutrients' }), h('span', { class: 'small muted', text: 'daily average vs reference · limits marked · food only' })), nutrients), h('div', { class: 'card', 'aria-label': 'Medicines taken' }, h('h2', { text: 'Medicines taken' }), meds)),
       h('div', { class: 'col' },
         chartCard('Calories', 'red = over target', kcal),
         chartCard('Protein', `line = ${n0(hist.protFloor)} g floor`, prot),

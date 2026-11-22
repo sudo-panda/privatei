@@ -1,6 +1,7 @@
 //! Record types. Field names match the export file (camelCase).
 //! Deserialisation is lenient so older files with numbers-as-strings still load.
 
+use crate::nutrients::Nut;
 use serde::{Deserialize, Serialize};
 
 pub mod lenient {
@@ -78,67 +79,6 @@ pub mod lenient {
     }
 }
 
-/// Vitamins and minerals tracked per food / per day.
-/// Units: vitamin C mg, vitamin D µg, B12 µg, iron mg, calcium mg.
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase", default)]
-pub struct Micros {
-    #[serde(deserialize_with = "lenient::f64")]
-    pub vit_c: f64,
-    #[serde(deserialize_with = "lenient::f64")]
-    pub vit_d: f64,
-    #[serde(deserialize_with = "lenient::f64")]
-    pub b12: f64,
-    #[serde(deserialize_with = "lenient::f64")]
-    pub iron: f64,
-    #[serde(deserialize_with = "lenient::f64")]
-    pub calcium: f64,
-}
-
-/// Daily reference amounts for an adult man (vitamin C 90 mg, D 15 µg, B12 2.4 µg, iron 8 mg, calcium 1000 mg).
-pub const MICRO_REF: Micros = Micros { vit_c: 90.0, vit_d: 15.0, b12: 2.4, iron: 8.0, calcium: 1000.0 };
-
-/// (key, label, unit) in display order.
-pub const MICRO_NAMES: [(&str, &str, &str); 5] = [
-    ("vitC", "Vitamin C", "mg"),
-    ("vitD", "Vitamin D", "µg"),
-    ("b12", "Vitamin B12", "µg"),
-    ("iron", "Iron", "mg"),
-    ("calcium", "Calcium", "mg"),
-];
-
-impl Micros {
-    pub fn add(&mut self, o: &Micros) {
-        self.vit_c += o.vit_c;
-        self.vit_d += o.vit_d;
-        self.b12 += o.b12;
-        self.iron += o.iron;
-        self.calcium += o.calcium;
-    }
-    pub fn scale(&self, f: f64) -> Micros {
-        Micros { vit_c: self.vit_c * f, vit_d: self.vit_d * f, b12: self.b12 * f, iron: self.iron * f, calcium: self.calcium * f }
-    }
-    pub fn values(&self) -> [f64; 5] {
-        [self.vit_c, self.vit_d, self.b12, self.iron, self.calcium]
-    }
-    /// Clamp to sane ranges (AI answers, imports).
-    pub fn clamped(&self) -> Micros {
-        let c = |x: f64, max: f64| if x.is_finite() { x.clamp(0.0, max) } else { 0.0 };
-        Micros {
-            vit_c: c(self.vit_c, 2000.0),
-            vit_d: c(self.vit_d, 250.0),
-            b12: c(self.b12, 1000.0),
-            iron: c(self.iron, 100.0),
-            calcium: c(self.calcium, 5000.0),
-        }
-    }
-    /// Round for storage/display.
-    pub fn rounded(&self) -> Micros {
-        let r = |x: f64| (x * 10.0).round() / 10.0;
-        Micros { vit_c: r(self.vit_c), vit_d: r(self.vit_d), b12: r(self.b12), iron: r(self.iron), calcium: self.calcium.round() }
-    }
-}
-
 fn yes() -> bool {
     true
 }
@@ -170,8 +110,12 @@ pub struct Log {
     /// Fiber in g; None when unknown (older rows, foods without data).
     #[serde(deserialize_with = "lenient::opt_f64", skip_serializing_if = "Option::is_none")]
     pub fiber: Option<f64>,
+    /// Everything else we know about this portion (see `nutrients::CATALOG`), fiber excluded.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub micros: Option<Micros>,
+    pub nut: Option<Nut>,
+    /// The food database entry this came from ("usda:167512", "swiss:123"), for rescaling.
+    #[serde(deserialize_with = "lenient::opt_string", skip_serializing_if = "Option::is_none")]
+    pub food_ref: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -306,7 +250,7 @@ pub struct Food {
     #[serde(deserialize_with = "lenient::opt_f64", skip_serializing_if = "Option::is_none")]
     pub fiber100: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub micros100: Option<Micros>,
+    pub nut100: Option<Nut>,
     #[serde(deserialize_with = "lenient::string")]
     pub src: String,
     #[serde(deserialize_with = "lenient::i64")]

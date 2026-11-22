@@ -1,6 +1,7 @@
 //! The food table, food matching, amount parsing and the local estimate.
 
-use crate::model::{meal_for_time, Food, Micros};
+use crate::model::{meal_for_time, Food};
+use crate::nutrients::{self, Nut};
 use serde::{Deserialize, Serialize};
 
 /// (name, kcal per 100 g, protein per 100 g)
@@ -71,16 +72,19 @@ pub const EXTRA: &[(&str, f64, [f64; 5])] = &[
     ("ghee", 0.0, [0.0, 0.0, 0.0, 0.0, 0.0]),
 ];
 
-fn extra_for(name: &str) -> (Option<f64>, Option<Micros>) {
+/// Keys of the five values in each EXTRA row.
+const EXTRA_KEYS: [&str; 5] = ["vitC", "vitD", "b12", "iron", "calcium"];
+
+fn extra_for(name: &str) -> (Option<f64>, Option<Nut>) {
     match EXTRA.iter().find(|(n, _, _)| *n == name) {
-        Some((_, f, m)) => (Some(*f), Some(Micros { vit_c: m[0], vit_d: m[1], b12: m[2], iron: m[3], calcium: m[4] })),
+        Some((_, f, m)) => (Some(*f), Some(EXTRA_KEYS.iter().zip(m.iter()).map(|(k, v)| (k.to_string(), *v)).collect())),
         None => (None, None),
     }
 }
 
 /// Foods richest in a nutrient per 100 g (for "what's missing" tips). `which`: "fiber" or a micro key.
 pub fn richest(which: &str, n: usize) -> Vec<String> {
-    let idx = crate::model::MICRO_NAMES.iter().position(|(k, _, _)| *k == which);
+    let idx = EXTRA_KEYS.iter().position(|k| *k == which);
     let mut v: Vec<(&str, f64)> =
         EXTRA.iter().map(|(name, f, m)| (*name, idx.map(|i| m[i]).unwrap_or(*f))).filter(|(_, x)| *x > 0.0).collect();
     v.sort_by(|a, b| b.1.total_cmp(&a.1));
@@ -182,13 +186,13 @@ pub struct FoodRef {
     pub piece: f64,
     pub learned: bool,
     pub fiber100: Option<f64>,
-    pub micros100: Option<Micros>,
+    pub nut100: Option<Nut>,
 }
 
 fn table_ref(name: &str) -> Option<FoodRef> {
     TABLE.iter().find(|(n, _, _)| *n == name).map(|(n, k, p)| {
-        let (fiber100, micros100) = extra_for(n);
-        FoodRef { name: n.to_string(), kcal100: *k, prot100: *p, piece: piece_weight(n), learned: false, fiber100, micros100 }
+        let (fiber100, nut100) = extra_for(n);
+        FoodRef { name: n.to_string(), kcal100: *k, prot100: *p, piece: piece_weight(n), learned: false, fiber100, nut100 }
     })
 }
 
@@ -238,7 +242,7 @@ pub fn match_food(user: &[String], learned: &[Food]) -> Option<FoodRef> {
             piece: f.piece,
             learned: true,
             fiber100: f.fiber100,
-            micros100: f.micros100,
+            nut100: f.nut100.clone(),
         });
     }
     match_table(user)
@@ -341,7 +345,7 @@ pub struct Item {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fiber: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub micros: Option<Micros>,
+    pub nut: Option<Nut>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -378,8 +382,8 @@ pub fn nutrients(f: &FoodRef, grams: f64) -> (f64, f64) {
 }
 
 /// Fiber and micronutrients for `grams` of a food, when known.
-pub fn extras(f: &FoodRef, grams: f64) -> (Option<f64>, Option<Micros>) {
-    (f.fiber100.map(|x| round1(x * grams / 100.0)), f.micros100.map(|m| m.scale(grams / 100.0).rounded()))
+pub fn extras(f: &FoodRef, grams: f64) -> (Option<f64>, Option<Nut>) {
+    (f.fiber100.map(|x| round1(x * grams / 100.0)), f.nut100.as_ref().map(|m| nutrients::scale(m, grams / 100.0)))
 }
 
 /// Place one phrase, if possible: (food, grams, estimated?).
@@ -427,7 +431,7 @@ pub fn local_estimate(text: &str, hhmm: &str, learned: &[Food]) -> LocalEstimate
         match place(&part, learned) {
             Some((f, grams, est)) => {
                 let (kcal, prot) = nutrients(&f, grams);
-                let (fiber, micros) = extras(&f, grams);
+                let (fiber, nut) = extras(&f, grams);
                 items.push(Item {
                     name: format!("{} · {} g", capitalize(&f.name), fmt_num(grams)),
                     grams: Some(grams),
@@ -436,7 +440,7 @@ pub fn local_estimate(text: &str, hhmm: &str, learned: &[Food]) -> LocalEstimate
                     est,
                     meal: meal.clone(),
                     fiber,
-                    micros,
+                    nut,
                 });
             }
             None => unknown.push(part),
@@ -480,7 +484,7 @@ pub fn learn_from(item: &Item, src: &str, ts: i64) -> Option<Food> {
         prot100: round1(item.prot * 100.0 / g),
         piece: if item.est { g } else { 0.0 },
         fiber100: item.fiber.map(|x| round1(x * 100.0 / g)),
-        micros100: item.micros.map(|m| m.scale(100.0 / g).rounded()),
+        nut100: item.nut.as_ref().map(|m| nutrients::scale(m, 100.0 / g)),
         src: src.to_string(),
         ts,
     })
@@ -609,7 +613,7 @@ mod tests {
             est: true,
             meal: "Snack".into(),
             fiber: None,
-            micros: None,
+            nut: None,
         };
         let f = learn_from(&item, "claude", 1).unwrap();
         assert_eq!((f.name.as_str(), f.kcal100, f.prot100, f.piece), ("Protein pudding", 80.0, 10.0, 200.0));
@@ -621,7 +625,7 @@ mod tests {
             est: false,
             meal: "Snack".into(),
             fiber: None,
-            micros: None,
+            nut: None,
         };
         assert_eq!(learn_from(&item, "gemini", 1).unwrap().piece, 0.0);
         let covered = Item {
@@ -632,7 +636,7 @@ mod tests {
             est: false,
             meal: "Lunch".into(),
             fiber: None,
-            micros: None,
+            nut: None,
         };
         assert!(learn_from(&covered, "claude", 1).is_none());
         let no_grams = Item { grams: None, ..item };
@@ -648,8 +652,8 @@ mod tests {
         let e = local_estimate("50g oats, 1 banana", "08:00", &[]);
         assert_eq!(e.items[0].fiber, Some(5.1));
         assert_eq!(e.items[1].fiber, Some(3.1));
-        let m = e.items[1].micros.unwrap();
-        assert_eq!(m.vit_c, 10.4);
+        let m = e.items[1].nut.clone().unwrap();
+        assert_eq!(m["vitC"], 10.4);
         assert_eq!(richest("fiber", 2), vec!["Ground flaxseed", "Soy granulate dry"]);
         assert_eq!(richest("vitC", 1), vec!["Bell pepper roasted dry"]);
         assert!(table_text().contains("oats 370/13/10.1"));

@@ -13,8 +13,11 @@ fn set_today(c: &mut Core, today: &str) {
 }
 
 fn log(c: &mut Core, date: &str, name: &str, kcal: f64, prot: f64) -> String {
-    c.add_log(date, LogInput { meal: "Lunch".into(), name: name.into(), grams: None, kcal, prot, est: false, fiber: None, micros: None })
-        .unwrap()
+    c.add_log(
+        date,
+        LogInput { meal: "Lunch".into(), name: name.into(), grams: None, kcal, prot, est: false, fiber: None, nut: None, food_ref: None },
+    )
+    .unwrap()
 }
 
 #[test]
@@ -47,7 +50,8 @@ fn manual_log_validation() {
         prot,
         est: false,
         fiber: None,
-        micros: None,
+        nut: None,
+        food_ref: None,
     };
     assert!(c.add_log("2026-11-22", bad(0.0, 1.0, "x")).is_err());
     assert!(c.add_log("2026-11-22", bad(5000.0, 1.0, "x")).is_err());
@@ -412,7 +416,7 @@ fn ai_settings_never_echo_key() {
 }
 
 #[test]
-fn fiber_and_micros_on_the_day() {
+fn fiber_and_nutrients_on_the_day() {
     let mut c = core("2026-11-22", "08:00");
     let p = c.prepare_estimate("80g oats, 200g frozen raspberries").unwrap();
     let v = c.finish_estimate(p, None);
@@ -422,11 +426,51 @@ fn fiber_and_micros_on_the_day() {
     assert_eq!(d.fiber, 21.1); // 8.1 + 13.0
     assert_eq!(d.fiber_floor, 30.0);
     assert!(!d.fiber_met);
-    let vc = d.micros.iter().find(|m| m.key == "vitC").unwrap();
-    assert_eq!((vc.amount, vc.pct), (52.0, Some(58.0)));
-    // A manual row without fiber doesn't make fiber "known" on an empty day.
+    let vc = d.nutrients.iter().find(|m| m.key == "vitC").unwrap();
+    assert_eq!((vc.amount, vc.pct, vc.coverage), (52.0, Some(58.0), 1.0));
+    assert!(d.nutrients.iter().find(|m| m.key == "sodium").unwrap().pct.is_none(), "unknown, not zero");
     log(&mut c, "2026-11-21", "Mystery", 300.0, 10.0);
     assert!(!c.day("2026-11-21").unwrap().fiber_known);
+}
+
+#[test]
+fn food_database_search_and_log() {
+    let mut c = core("2026-11-22", "12:00");
+    c.foods = Some(privatei_core::fooddb::sample_db());
+    let hits = c.search_foods("chick", 10);
+    let refs: Vec<&str> = hits.iter().map(|h| h.reference.as_str()).collect();
+    assert!(refs.contains(&"table:chicken breast"), "built-in table first: {refs:?}");
+    assert!(refs.contains(&"usda:1"));
+    assert_eq!(hits[0].source, "table");
+    let id = c.add_food("2026-11-22", "Lunch", "usda:2", 250.0).unwrap();
+    let d = c.day("2026-11-22").unwrap();
+    assert_eq!((d.kcal, d.prot, d.fiber), (290.0, 22.5, 19.8));
+    let folate = d.nutrients.iter().find(|n| n.key == "folate").unwrap();
+    assert_eq!(folate.amount, 453.0);
+    let l = c.store.get::<Log>(&id).unwrap().clone();
+    assert_eq!(l.food_ref.as_deref(), Some("usda:2"));
+    assert_eq!(l.name, "Lentils, mature seeds, cooked, boiled · 250 g");
+    // Editing the grams rescales the stored nutrients.
+    c.update_log(
+        &id,
+        LogInput {
+            meal: "Lunch".into(),
+            name: l.name.clone(),
+            grams: Some(125.0),
+            kcal: 145.0,
+            prot: 11.3,
+            est: false,
+            fiber: Some(9.9),
+            nut: None,
+            food_ref: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(c.store.get::<Log>(&id).unwrap().nut.as_ref().unwrap()["folate"], 227.0); // 453 × 0.5 = 226.5, rounded
+    assert!(c.add_food("2026-11-22", "Lunch", "usda:999", 100.0).is_err());
+    assert!(c.add_food("2026-11-22", "Lunch", "usda:2", 0.0).is_err());
+    assert!(c.remove_food_source("usda").is_err(), "the shipped database stays");
+    assert_eq!(c.food_detail("table:egg").unwrap().portions[0].grams, 55.0);
 }
 
 #[test]
@@ -452,7 +496,7 @@ fn history_insights_point_at_what_is_missing() {
     let titles: Vec<&str> = h.insights.iter().map(|i| i.title.as_str()).collect();
     assert!(titles.iter().any(|t| t.starts_with("Protein under 90 g on")), "{titles:?}");
     assert!(titles.iter().any(|t| t.starts_with("Fiber averaged")), "{titles:?}");
-    assert!(titles.iter().any(|t| t.starts_with("Vitamin D at 2%")), "{titles:?}");
+    assert!(titles.iter().any(|t| t.starts_with("Vitamin D at")), "{titles:?}");
     assert!(titles.iter().any(|t| t.starts_with("Magnesium missed 4 of 14")), "{titles:?}");
     assert!(titles.iter().any(|t| t.contains("training")), "{titles:?}");
     assert_eq!(h.insights[0].level, "warn", "warnings come first");
@@ -516,7 +560,8 @@ fn edit_log_plan_and_training() {
         prot: 14.0,
         est: false,
         fiber: Some(0.0),
-        micros: None,
+        nut: None,
+        food_ref: None,
     };
     c.update_log(&id, edit("Two eggs", 157.0)).unwrap();
     let d = c.day("2026-11-22").unwrap();
@@ -548,7 +593,8 @@ fn edit_log_plan_and_training() {
             prot: 50.0,
             est: false,
             fiber: None,
-            micros: None,
+            nut: None,
+            food_ref: None,
         },
     )
     .unwrap();

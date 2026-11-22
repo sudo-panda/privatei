@@ -6,6 +6,7 @@ use crate::dates;
 use crate::food::{self, round1, Item, LocalEstimate};
 use crate::meds;
 use crate::model::*;
+use crate::nutrients::{self, Nut};
 use crate::store::{new_id, Store};
 use crate::training;
 use serde::{Deserialize, Serialize};
@@ -24,6 +25,8 @@ pub enum Clock {
 
 pub struct Core {
     pub store: Store,
+    /// National food databases (None until opened).
+    pub foods: Option<crate::fooddb::FoodDb>,
     pub cache_dir: PathBuf,
     clock: Clock,
     last_ts: std::cell::Cell<i64>,
@@ -118,8 +121,8 @@ pub struct DayView {
     pub fiber_floor: f64,
     pub fiber_known: bool,
     pub fiber_met: bool,
-    /// Vitamins/minerals vs the daily reference (from rows that have data).
-    pub micros: Vec<MicroView>,
+    /// Every tracked nutrient for the day (the Log shows few; History shows all).
+    pub nutrients: Vec<NutView>,
     pub plan: Vec<PlanMealView>,
     pub meals: Vec<MealGroup>,
     pub meds: Vec<DoseView>,
@@ -141,7 +144,9 @@ pub struct LogInput {
     #[serde(default)]
     pub fiber: Option<f64>,
     #[serde(default)]
-    pub micros: Option<Micros>,
+    pub nut: Option<Nut>,
+    #[serde(default)]
+    pub food_ref: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -153,7 +158,8 @@ pub struct RecentFood {
     pub prot: f64,
     pub est: bool,
     pub fiber: Option<f64>,
-    pub micros: Option<Micros>,
+    pub nut: Option<Nut>,
+    pub food_ref: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -334,7 +340,7 @@ pub struct HistDay {
     pub kcal: f64,
     pub prot: f64,
     pub fiber: Option<f64>,
-    pub micros: Option<Micros>,
+    pub nut: Option<Nut>,
     pub mins: f64,
     pub taken: usize,
     pub due: usize,
@@ -347,14 +353,57 @@ pub struct HistDay {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MicroView {
+pub struct NutView {
     pub key: String,
     pub label: String,
     pub unit: String,
+    pub group: String,
+    /// "target" (reach it), "limit" (stay under) or "info".
+    pub kind: String,
     pub amount: f64,
     pub reference: f64,
-    /// Percent of the daily reference; None when there's no data.
+    /// Percent of the reference; None when unknown or there's no reference.
     pub pct: Option<f64>,
+    /// Share (0–1) of entries/days that had a value for this nutrient.
+    pub coverage: f64,
+}
+
+/// Build views for every catalog nutrient from summed amounts and how many
+/// entries knew each one, out of `total` entries.
+fn nut_views(sum: &Nut, known: &BTreeMap<String, usize>, total: usize, fiber_ref: f64) -> Vec<NutView> {
+    nutrients::CATALOG
+        .iter()
+        .map(|d| {
+            let k = known.get(d.key).copied().unwrap_or(0);
+            let amount = sum.get(d.key).copied().unwrap_or(0.0);
+            let reference = if d.key == "fiber" { fiber_ref } else { d.reference };
+            NutView {
+                key: d.key.into(),
+                label: d.label.into(),
+                unit: d.unit.into(),
+                group: d.group.into(),
+                kind: match d.kind {
+                    nutrients::Kind::Target => "target",
+                    nutrients::Kind::Limit => "limit",
+                    nutrients::Kind::Info => "info",
+                }
+                .into(),
+                amount: nutrients::round(amount),
+                reference,
+                pct: (k > 0 && reference > 0.0).then(|| (amount / reference * 100.0).round()),
+                coverage: if total == 0 { 0.0 } else { (k as f64 / total as f64 * 100.0).round() / 100.0 },
+            }
+        })
+        .collect()
+}
+
+/// A log row's nutrients including fiber.
+fn row_nut(l: &Log) -> Nut {
+    let mut n = l.nut.clone().unwrap_or_default();
+    if let Some(f) = l.fiber {
+        n.insert("fiber".into(), f);
+    }
+    n
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -370,7 +419,7 @@ pub struct HistSummary {
     pub adherence: Option<f64>,
     pub days_trained: usize,
     pub days_used: usize,
-    pub micros: Vec<MicroView>,
+    pub nutrients: Vec<NutView>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -564,12 +613,13 @@ pub fn parse_qty(s: &str) -> (f64, String) {
 impl Core {
     pub fn open(data_dir: &Path, cache_dir: &Path, device: &str) -> Result<Core> {
         let store = Store::open(&data_dir.join("privatei.sqlite"), device)?;
-        Ok(Core { store, cache_dir: cache_dir.to_path_buf(), clock: Clock::System, last_ts: Default::default() })
+        Ok(Core { store, foods: None, cache_dir: cache_dir.to_path_buf(), clock: Clock::System, last_ts: Default::default() })
     }
 
     pub fn in_memory() -> Core {
         Core {
             store: Store::open_in_memory("test").expect("in-memory db"),
+            foods: None,
             cache_dir: std::env::temp_dir().join("privatei-cache"),
             clock: Clock::System,
             last_ts: Default::default(),
@@ -690,29 +740,23 @@ impl Core {
             .collect();
         let (kcal, prot) = self.totals(date);
         let (burn, _) = self.burn_on(date);
-        let (mut fiber, mut fiber_known, mut micros, mut micros_known) = (0.0, false, Micros::default(), false);
+        let (mut fiber, mut fiber_known) = (0.0, false);
+        let mut sum = Nut::new();
+        let mut known: BTreeMap<String, usize> = BTreeMap::new();
+        let mut rows = 0;
         for (_, l) in self.store.all::<Log>().filter(|(_, l)| l.date == date) {
+            rows += 1;
             if let Some(f) = l.fiber {
                 fiber += f;
                 fiber_known = true;
             }
-            if let Some(m) = &l.micros {
-                micros.add(m);
-                micros_known = true;
+            let n = row_nut(l);
+            for k in n.keys() {
+                *known.entry(k.clone()).or_default() += 1;
             }
+            nutrients::add(&mut sum, &n);
         }
-        let micro_views: Vec<MicroView> = MICRO_NAMES
-            .iter()
-            .zip(micros.values().iter().zip(MICRO_REF.values().iter()))
-            .map(|((key, label, unit), (v, r))| MicroView {
-                key: key.to_string(),
-                label: label.to_string(),
-                unit: unit.to_string(),
-                amount: round1(*v),
-                reference: *r,
-                pct: micros_known.then(|| (v / r * 100.0).round()),
-            })
-            .collect();
+        let nutrient_views = nut_views(&sum, &known, rows, s.fiber_floor);
         let target = training::day_target(s.kcal_target, burn, s.add_burn && burn > 0.0);
         let plan = self
             .store
@@ -755,7 +799,7 @@ impl Core {
             fiber_floor: s.fiber_floor,
             fiber_known,
             fiber_met: fiber_known && fiber >= s.fiber_floor,
-            micros: micro_views,
+            nutrients: nutrient_views,
             plan,
             meals,
             meds: self.doses(date),
@@ -790,7 +834,8 @@ impl Core {
             est: input.est,
             ts: self.now(),
             fiber: input.fiber.filter(|f| f.is_finite() && *f >= 0.0).map(|f| round1(f.min(300.0))),
-            micros: input.micros.map(|m| m.clamped().rounded()),
+            nut: input.nut.as_ref().map(nutrients::clean).filter(|n| !n.is_empty()),
+            food_ref: input.food_ref.clone(),
         };
         self.store.put(&id, log)?;
         Ok(id)
@@ -810,14 +855,14 @@ impl Core {
             return Err("Protein must be between 0 and 500 g.".into());
         }
         let grams = input.grams.filter(|g| *g > 0.0 && g.is_finite());
-        // Scale known micros when only the amount changed.
-        if let (Some(old), Some(new), Some(m)) = (l.grams, grams, l.micros) {
-            if old > 0.0 && input.micros.is_none() {
-                l.micros = Some(m.scale(new / old).rounded());
+        // Changing the amount rescales everything we know about the portion.
+        if let (Some(old), Some(new), Some(m)) = (l.grams, grams, l.nut.as_ref()) {
+            if old > 0.0 && input.nut.is_none() {
+                l.nut = Some(nutrients::scale(m, new / old));
             }
         }
-        if input.micros.is_some() {
-            l.micros = input.micros.map(|m| m.clamped().rounded());
+        if let Some(n) = &input.nut {
+            l.nut = Some(nutrients::clean(n)).filter(|n| !n.is_empty());
         }
         l.name = name;
         l.meal = valid_meal(&input.meal, &self.hhmm());
@@ -881,7 +926,8 @@ impl Core {
                     est: it.est,
                     ts: now + i as i64,
                     fiber: it.fiber.filter(|f| f.is_finite()).map(|f| round1(f.clamp(0.0, 300.0))),
-                    micros: it.micros.map(|m| m.clamped().rounded()),
+                    nut: it.nut.as_ref().map(nutrients::clean).filter(|n| !n.is_empty()),
+                    food_ref: None,
                 };
                 s.put(&new_id(), log)?;
                 n += 1;
@@ -934,7 +980,8 @@ impl Core {
                 est: false,
                 ts: now,
                 fiber: m.fiber,
-                micros: None,
+                nut: None,
+                food_ref: None,
             };
             self.store.put(&id, log)?;
             m.done = true;
@@ -1018,7 +1065,8 @@ impl Core {
                     prot: l.prot,
                     est: l.est,
                     fiber: l.fiber,
-                    micros: l.micros,
+                    nut: l.nut.clone(),
+                    food_ref: l.food_ref.clone(),
                 });
                 if out.len() == 8 {
                     break;
@@ -1098,6 +1146,127 @@ impl Core {
                 let _ = self.store.put(&existing.unwrap_or_else(new_id), f);
             }
         }
+    }
+
+    // ---------- Food database ----------
+
+    fn builtin_food(&self, reference: &str) -> Option<crate::fooddb::DbFood> {
+        use crate::fooddb::{DbFood, Portion};
+        let (kind, key) = reference.split_once(':')?;
+        let (name, kcal, prot, piece, fiber, nut, source_name) = match kind {
+            "table" => {
+                let (n, k, p) = crate::food::TABLE.iter().find(|(n, _, _)| *n == key)?;
+                let f = crate::food::match_table(&crate::food::words(n))?;
+                (food::capitalize(n), *k, *p, f.piece, f.fiber100, f.nut100.clone().unwrap_or_default(), "Built-in table")
+            }
+            "mine" => {
+                let f = self.store.get::<Food>(key)?;
+                (f.name.clone(), f.kcal100, f.prot100, f.piece, f.fiber100, f.nut100.clone().unwrap_or_default(), "Learned foods")
+            }
+            _ => return None,
+        };
+        let mut nut100 = nut;
+        if let Some(f) = fiber {
+            nut100.insert("fiber".into(), f);
+        }
+        Some(DbFood {
+            reference: reference.to_string(),
+            name,
+            source: kind.to_string(),
+            source_name: source_name.into(),
+            category: String::new(),
+            kcal100: kcal,
+            prot100: prot,
+            fiber100: fiber,
+            known: nut100.len(),
+            nut100,
+            portions: if piece > 0.0 { vec![Portion { label: "1 piece".into(), grams: piece }] } else { vec![] },
+        })
+    }
+
+    /// Search your built-in and learned foods, then the national databases.
+    pub fn search_foods(&self, query: &str, limit: usize) -> Vec<crate::fooddb::DbFood> {
+        let q: Vec<String> =
+            query.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(String::from).collect();
+        if q.is_empty() {
+            return vec![];
+        }
+        let hit = |name: &str| {
+            let words: Vec<String> =
+                name.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(String::from).collect();
+            q.iter().all(|w| words.iter().any(|n| n.starts_with(w.as_str())))
+        };
+        let mut out: Vec<crate::fooddb::DbFood> = vec![];
+        for (id, f) in self.store.all::<Food>() {
+            if hit(&f.name) {
+                out.extend(self.builtin_food(&format!("mine:{id}")));
+            }
+        }
+        for (n, _, _) in crate::food::TABLE {
+            if hit(n) {
+                out.extend(self.builtin_food(&format!("table:{n}")));
+            }
+        }
+        out.truncate(4);
+        if let Some(db) = &self.foods {
+            out.extend(db.search(query, limit));
+        }
+        out.truncate(limit.clamp(1, 100));
+        out
+    }
+
+    pub fn food_detail(&self, reference: &str) -> Option<crate::fooddb::DbFood> {
+        self.builtin_food(reference).or_else(|| self.foods.as_ref()?.get(reference))
+    }
+
+    pub fn food_sources(&self) -> Vec<crate::fooddb::SourceInfo> {
+        self.foods.as_ref().map(|d| d.sources()).unwrap_or_default()
+    }
+
+    /// Log `grams` of a database food, with everything the database knows about it.
+    pub fn add_food(&mut self, date: &str, meal: &str, reference: &str, grams: f64) -> Result<String> {
+        check_date(date)?;
+        if !(grams > 0.0 && grams <= 5000.0) {
+            return Err("Grams must be between 1 and 5000.".into());
+        }
+        let f = self.food_detail(reference).ok_or("That food isn't in your databases any more.")?;
+        let k = grams / 100.0;
+        let mut nut = nutrients::scale(&f.nut100, k);
+        let fiber = nut.remove("fiber");
+        let id = new_id();
+        let log = Log {
+            date: date.into(),
+            meal: valid_meal(meal, &self.hhmm()),
+            name: format!("{} · {} g", f.name, food::fmt_num(grams.round())),
+            grams: Some(grams.round()),
+            kcal: (f.kcal100 * k).round(),
+            prot: round1(f.prot100 * k),
+            est: false,
+            ts: self.now(),
+            fiber,
+            nut: (!nut.is_empty()).then_some(nut),
+            food_ref: Some(f.reference),
+        };
+        if log.kcal >= 5000.0 {
+            return Err("That's more than 5000 kcal in one entry.".into());
+        }
+        self.store.put(&id, log)?;
+        Ok(id)
+    }
+
+    /// Import the Swiss database from the official xlsx (downloaded by the app).
+    #[cfg(feature = "import")]
+    pub fn import_swiss(&mut self, bytes: &[u8], version: &str) -> Result<usize> {
+        let db = self.foods.as_ref().ok_or("The food database isn't open.")?;
+        let foods = crate::importers::swiss_from_xlsx(bytes)?;
+        db.replace_source(&crate::importers::swiss_info(version), &foods)
+    }
+
+    pub fn remove_food_source(&mut self, id: &str) -> Result<()> {
+        if id == "usda" {
+            return Err("The USDA database comes with the app and can't be removed.".into());
+        }
+        self.foods.as_ref().ok_or("The food database isn't open.")?.remove_source(id)
     }
 
     pub fn quick(&self, name: &str, grams: Option<f64>) -> Option<QuickFill> {
@@ -1834,32 +2003,24 @@ impl Core {
         let today = self.today();
         let start = dates::add_days(&today, 1 - range);
         let s = self.store.settings();
-        #[derive(Default, Clone, Copy)]
+        #[derive(Default, Clone)]
         struct Acc {
             kcal: f64,
             prot: f64,
             fiber: f64,
             fiber_known: bool,
-            micros: Micros,
-            micros_known: bool,
-            rows: usize,
-            fiber_rows: usize,
+            nut: Nut,
         }
         let mut food: HashMap<&str, Acc> = HashMap::new();
         for (_, l) in self.store.all::<Log>() {
             let e = food.entry(l.date.as_str()).or_default();
             e.kcal += l.kcal;
             e.prot += l.prot;
-            e.rows += 1;
             if let Some(f) = l.fiber {
                 e.fiber += f;
                 e.fiber_known = true;
-                e.fiber_rows += 1;
             }
-            if let Some(m) = &l.micros {
-                e.micros.add(m);
-                e.micros_known = true;
-            }
+            nutrients::add(&mut e.nut, &row_nut(l));
         }
         let mut mins: HashMap<&str, f64> = HashMap::new();
         let mut burns: HashMap<&str, f64> = HashMap::new();
@@ -1883,7 +2044,7 @@ impl Core {
         let mut med_hist: BTreeMap<String, (String, usize, usize)> = BTreeMap::new(); // group -> (name, taken, due)
         let mut d = first;
         while d <= today {
-            let a = food.get(d.as_str()).copied().unwrap_or_default();
+            let a = food.get(d.as_str()).cloned().unwrap_or_default();
             let m = mins.get(d.as_str()).copied().unwrap_or(0.0);
             let due: Vec<(&String, &Med)> = medlist.iter().filter(|(_, x)| meds::is_due(x, &d)).copied().collect();
             let is_used = used(&d);
@@ -1903,7 +2064,7 @@ impl Core {
                 kcal: a.kcal.round(),
                 prot: round1(a.prot),
                 fiber: a.fiber_known.then(|| round1(a.fiber)),
-                micros: a.micros_known.then(|| a.micros.rounded()),
+                nut: (!a.nut.is_empty()).then(|| a.nut.iter().map(|(k, v)| (k.clone(), nutrients::round(*v))).collect()),
                 mins: m,
                 taken,
                 due: due.len(),
@@ -1920,27 +2081,22 @@ impl Core {
         let food_days: Vec<&HistDay> = days.iter().filter(|d| d.kcal > 0.0 || d.prot > 0.0).collect();
         let fd = food_days.len().max(1) as f64;
         let fiber_days: Vec<f64> = food_days.iter().filter_map(|d| d.fiber).collect();
-        let micro_days: Vec<Micros> = food_days.iter().filter_map(|d| d.micros).collect();
         let due: usize = used_days.iter().map(|d| d.due).sum();
         let taken: usize = used_days.iter().map(|d| d.taken).sum();
         let avg = |v: &[f64]| if v.is_empty() { 0.0 } else { v.iter().sum::<f64>() / v.len() as f64 };
-        let mut micro_avg = Micros::default();
-        for m in &micro_days {
-            micro_avg.add(m);
+        // Per nutrient: average over the food days that had a value for it.
+        let mut nsum = Nut::new();
+        let mut nknown: BTreeMap<String, usize> = BTreeMap::new();
+        for d in &food_days {
+            if let Some(n) = &d.nut {
+                for (k, v) in n {
+                    *nsum.entry(k.clone()).or_default() += v;
+                    *nknown.entry(k.clone()).or_default() += 1;
+                }
+            }
         }
-        let micro_avg = if micro_days.is_empty() { micro_avg } else { micro_avg.scale(1.0 / micro_days.len() as f64) };
-        let micros: Vec<MicroView> = MICRO_NAMES
-            .iter()
-            .zip(micro_avg.values().iter().zip(MICRO_REF.values().iter()))
-            .map(|((key, label, unit), (v, r))| MicroView {
-                key: key.to_string(),
-                label: label.to_string(),
-                unit: unit.to_string(),
-                amount: round1(*v),
-                reference: *r,
-                pct: if micro_days.is_empty() { None } else { Some((v / r * 100.0).round()) },
-            })
-            .collect();
+        let navg: Nut = nsum.iter().map(|(k, v)| (k.clone(), v / nknown[k] as f64)).collect();
+        let nutrient_views = nut_views(&navg, &nknown, food_days.len(), s.fiber_floor);
         let summary = HistSummary {
             avg_kcal: if food_days.is_empty() { 0.0 } else { (food_days.iter().map(|d| d.kcal).sum::<f64>() / fd).round() },
             avg_prot: if food_days.is_empty() { 0.0 } else { round1(food_days.iter().map(|d| d.prot).sum::<f64>() / fd) },
@@ -1951,7 +2107,7 @@ impl Core {
             adherence: (due > 0).then(|| (taken as f64 * 100.0 / due as f64).round()),
             days_trained: days.iter().filter(|d| d.mins > 0.0).count(),
             days_used: used_days.len(),
-            micros,
+            nutrients: nutrient_views,
         };
         let meds: Vec<MedHist> =
             med_hist.into_values().map(|(name, taken, due)| MedHist { name, taken, due, missed: due - taken }).collect();
@@ -2026,22 +2182,36 @@ impl Core {
                 "A big deficit makes it harder to protect protein and muscle.",
             ));
         }
-        for m in &sum.micros {
-            if let Some(p) = m.pct {
-                if p < 60.0 {
-                    out.push(Insight::warn(
-                        &format!("{} at {p:.0}% of the daily amount", m.label),
-                        &format!(
-                            "About {} {} a day against {} {}, from food only (supplements not counted). Good sources: {}.",
-                            m.amount,
-                            m.unit,
-                            m.reference,
-                            m.unit,
-                            tips(&m.key)
-                        ),
-                    ));
-                }
+        // Nutrients known on at least half the food days.
+        for m in sum.nutrients.iter().filter(|m| m.key != "fiber" && m.coverage >= 0.5) {
+            let Some(p) = m.pct else { continue };
+            if m.kind == "target" && p < 60.0 {
+                let good = crate::food::richest(&m.key, 4);
+                out.push(Insight::warn(
+                    &format!("{} at {p:.0}% of the daily amount", m.label),
+                    &format!(
+                        "About {} {} a day against {} {}, from food only (supplements not counted).{}",
+                        m.amount,
+                        m.unit,
+                        m.reference,
+                        m.unit,
+                        if good.is_empty() { String::new() } else { format!(" Good sources: {}.", good.join(", ")) }
+                    ),
+                ));
+            } else if m.kind == "limit" && p > 100.0 {
+                out.push(Insight::warn(
+                    &format!("{} above your limit", m.label),
+                    &format!("About {} {} a day against a limit of {} {}.", m.amount, m.unit, m.reference, m.unit),
+                ));
             }
+        }
+        let thin: Vec<&str> =
+            sum.nutrients.iter().filter(|m| m.kind != "info" && m.coverage > 0.0 && m.coverage < 0.5).map(|m| m.label.as_str()).collect();
+        if !thin.is_empty() && thin.len() <= 6 {
+            out.push(Insight::info(
+                "Some nutrients are only partly known",
+                &format!("{} — log foods from the food database to fill these in.", thin.join(", ")),
+            ));
         }
         let missed: Vec<&MedHist> = meds.iter().filter(|m| m.missed > 0).collect();
         if meds.iter().any(|m| m.due > 0) && missed.is_empty() {

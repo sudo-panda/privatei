@@ -12,3 +12,5 @@ ui/playwright-report/
 apps/desktop/gen/
 test-results/
 playwright-report/
+# Generated food database (built from USDA CSVs, see CLAUDE.md)
+apps/desktop/resources/foods.sqlite

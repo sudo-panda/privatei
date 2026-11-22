@@ -37,6 +37,20 @@ this project's key.
   **Work out the calories**. Known foods are worked out on the Mac; only unknown ones go to the AI,
   and what the AI learns is remembered for next time.
 
+## Food databases
+
+Search thousands of foods when you add food or plan meals:
+
+- **USDA FoodData Central** (SR Legacy + Foundation, ~8,200 foods, 30–40 nutrients each) is
+  built in. Public domain; source: U.S. Department of Agriculture, Agricultural Research
+  Service, FoodData Central.
+- **Swiss Food Composition Database** (~1,200 foods): Settings → Food databases → Download.
+  Fetched from naehrwertdaten.ch (Federal Food Safety and Veterinary Office FSVO) and kept on
+  your Mac; it isn't redistributed with the app.
+
+Your built-in food table and foods the AI has worked out are searched first. A nutrient a
+database doesn't have is shown as unknown, never as zero.
+
 ## Keyboard
 
 | Keys | Does |

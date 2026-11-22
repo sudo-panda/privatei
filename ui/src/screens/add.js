@@ -1,6 +1,7 @@
 import { h, fill, iconButton, toast, n0, n1, dayLabel, chipGroup } from '../dom.js';
 import { call, quiet, message } from '../api.js';
 import { state, go, changed } from '../state.js';
+import { foodSearch } from '../foodsearch.js';
 
 const MEALS = ['Breakfast', 'Lunch', 'Snack', 'Dinner'];
 let els = {};
@@ -70,6 +71,21 @@ function mount(root, o = {}) {
 
   els.draft = h('div', { class: 'card hidden', id: 'draft', 'aria-label': 'Draft' });
 
+  const search = foodSearch({
+    id: 'food-search',
+    meal: guessMeal(),
+    confirmLabel: 'Add to log',
+    onPick: async (f, grams, meal) => {
+      try {
+        await quiet('add_food', { date: state.date, meal: meal || '', reference: f.ref, grams });
+      } catch (e) {
+        toast(message(e), 'error');
+        return false;
+      }
+      toast(`Logged ${f.name}`);
+      changed();
+    },
+  });
   if (o.compact) {
     // Inline on a day: one "Add food" card; typing numbers by hand is tucked away.
     const manual = manualCard();
@@ -78,13 +94,16 @@ function mount(root, o = {}) {
     root.append(
       h('div', { class: 'card add-inline', 'aria-label': 'Add food' },
         h('div', { class: 'row spread' }, h('h2', { text: 'Add food' }), els.target),
-        els.recent, text, h('div', { class: 'grid2' }, work, photoBtn), photoInput, els.status,
+        search,
+        els.recent,
+        h('div', { class: 'small muted', text: 'Or describe it — known foods are worked out on your Mac, the rest by AI:' }),
+        text, h('div', { class: 'grid2' }, work, photoBtn), photoInput, els.status,
         h('details', { class: 'set-more' }, h('summary', { class: 'small', text: 'Type the numbers myself' }), manual)),
       els.draft,
     );
     return;
   }
-  root.append(h('div', { class: 'cols' }, h('div', { class: 'col' }, describeCard, els.draft), h('div', { class: 'col' }, recentCard, manualCard())));
+  root.append(h('div', { class: 'cols' }, h('div', { class: 'col' }, h('div', { class: 'card' }, h('h2', { text: 'Search foods' }), search), describeCard, els.draft), h('div', { class: 'col' }, recentCard, manualCard())));
 }
 
 function readAsDataUrl(file) {

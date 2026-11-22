@@ -31,10 +31,12 @@ jobs:
       - run: npm ci
       - name: Build the UI (the desktop crate embeds it)
         run: npm run build:ui
+      - name: Placeholder food database (the real one is built for releases)
+        run: mkdir -p apps/desktop/resources && touch apps/desktop/resources/foods.sqlite
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo clippy -p privatei-core --all-targets --no-default-features -- -D warnings
-      - run: cargo test -p privatei-core --features cli
+      - run: cargo test -p privatei-core --features cli,import
       - run: cargo test -p privatei-core
 
   ui:

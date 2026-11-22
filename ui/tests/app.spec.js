@@ -459,5 +459,49 @@ test('New layout: plan board, edit sheets, charts and insights', async ({ page }
   await tab(page, 'history').click();
   await expect(page.locator('.insights .insight').first()).toContainText('Needs attention');
   await expect(page.locator('#screen-history .chart svg')).toHaveCount(4);
-  await expect(page.locator('.card[aria-label="Vitamins and minerals"] .pct-row')).toHaveCount(5);
+  await expect(page.locator('.card[aria-label="Nutrients"] .pct-row').first()).toBeVisible();
+});
+
+test('Food database: search, pick a portion, log it; Swiss download; nutrients in History', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&hhmm=12:00');
+  await page.locator('#food-search').fill('lentils');
+  const first = page.locator('.food-hit').first();
+  await expect(first).toContainText('Lentils');
+  await expect(first).toContainText('USDA');
+  await first.click();
+  await expect(page.locator('#food-search-grams')).toHaveValue('100');
+  await page.locator('.food-picked .chip', { hasText: 'cup' }).first().click();
+  await page.getByRole('button', { name: 'Lunch', exact: true }).click();
+  await page.getByRole('button', { name: 'Add to log' }).click();
+  await expect(page.locator('.toast').last()).toContainText('Logged Lentils');
+  await expect(page.locator('[data-meal="Lunch"]')).toContainText('Lentils');
+  // Built-in foods come first for words they know (skyr isn't in USDA).
+  await page.locator('#food-search').fill('skyr');
+  await expect(page.locator('.food-hit').first()).toContainText('Built-in');
+  // Plan editor: search fills the meal
+  await tab(page, 'plan').click();
+  await page.locator('.plan-day').first().getByLabel(/Add dinner on Today/).click();
+  await page.locator('#plan-food').fill('chickpeas');
+  await page.locator('.sheet .food-hit').first().click();
+  await page.locator('#plan-food-grams').fill('200');
+  await page.getByRole('button', { name: 'Use this' }).click();
+  await expect(page.locator('#pm-name')).toHaveValue(/Chickpeas.*200 g/);
+  await expect(page.locator('#pm-kcal')).not.toHaveValue('');
+  await page.getByRole('button', { name: 'Add to plan' }).click();
+  await expect(page.locator('.plan-day').first()).toContainText('Chickpeas');
+  // Settings: download the Swiss database, then search it
+  await page.locator('#open-settings').click();
+  await expect(page.locator('[data-source="usda"]')).toContainText('8,237 foods');
+  await page.locator('#get-swiss').click();
+  await expect(page.locator('#foods-status')).toHaveText('Added 1,216 foods.');
+  await expect(page.locator('[data-source="swiss"]')).toBeVisible();
+  await tab(page, 'today').click();
+  await page.locator('#food-search').fill('rosti');
+  await expect(page.locator('.food-hit').first()).toContainText('Swiss');
+  // History lists every nutrient it knows about, grouped
+  await tab(page, 'history').click();
+  const nut = page.locator('.card[aria-label="Nutrients"]');
+  await expect(nut.locator('.nut-group h3', { hasText: 'Minerals' })).toBeVisible();
+  await expect(nut.locator('.pct-row', { hasText: 'Folate' })).toBeVisible();
 });

@@ -1,0 +1,322 @@
+[
+{
+"key": "fiber",
+"label": "Fiber",
+"unit": "g",
+"group": "Carbs",
+"reference": 30.0,
+"kind": "target"
+},
+{
+"key": "carbs",
+"label": "Carbohydrates",
+"unit": "g",
+"group": "Carbs",
+"reference": 275.0,
+"kind": "info"
+},
+{
+"key": "sugar",
+"label": "Sugars",
+"unit": "g",
+"group": "Carbs",
+"reference": 0.0,
+"kind": "info"
+},
+{
+"key": "addedSugar",
+"label": "Added sugar",
+"unit": "g",
+"group": "Carbs",
+"reference": 50.0,
+"kind": "limit"
+},
+{
+"key": "starch",
+"label": "Starch",
+"unit": "g",
+"group": "Carbs",
+"reference": 0.0,
+"kind": "info"
+},
+{
+"key": "fat",
+"label": "Fat",
+"unit": "g",
+"group": "Fats",
+"reference": 78.0,
+"kind": "info"
+},
+{
+"key": "satFat",
+"label": "Saturated fat",
+"unit": "g",
+"group": "Fats",
+"reference": 17.0,
+"kind": "limit"
+},
+{
+"key": "monoFat",
+"label": "Monounsaturated fat",
+"unit": "g",
+"group": "Fats",
+"reference": 0.0,
+"kind": "info"
+},
+{
+"key": "polyFat",
+"label": "Polyunsaturated fat",
+"unit": "g",
+"group": "Fats",
+"reference": 0.0,
+"kind": "info"
+},
+{
+"key": "transFat",
+"label": "Trans fat",
+"unit": "g",
+"group": "Fats",
+"reference": 2.0,
+"kind": "limit"
+},
+{
+"key": "ala",
+"label": "Omega-3 ALA",
+"unit": "g",
+"group": "Fats",
+"reference": 1.6,
+"kind": "target"
+},
+{
+"key": "epa",
+"label": "Omega-3 EPA",
+"unit": "g",
+"group": "Fats",
+"reference": 0.0,
+"kind": "info"
+},
+{
+"key": "dha",
+"label": "Omega-3 DHA",
+"unit": "g",
+"group": "Fats",
+"reference": 0.0,
+"kind": "info"
+},
+{
+"key": "cholesterol",
+"label": "Cholesterol",
+"unit": "mg",
+"group": "Fats",
+"reference": 300.0,
+"kind": "limit"
+},
+{
+"key": "vitA",
+"label": "Vitamin A",
+"unit": "µg",
+"group": "Vitamins",
+"reference": 900.0,
+"kind": "target"
+},
+{
+"key": "vitB1",
+"label": "Vitamin B1",
+"unit": "mg",
+"group": "Vitamins",
+"reference": 1.2,
+"kind": "target"
+},
+{
+"key": "vitB2",
+"label": "Vitamin B2",
+"unit": "mg",
+"group": "Vitamins",
+"reference": 1.3,
+"kind": "target"
+},
+{
+"key": "vitB3",
+"label": "Vitamin B3",
+"unit": "mg",
+"group": "Vitamins",
+"reference": 16.0,
+"kind": "target"
+},
+{
+"key": "vitB5",
+"label": "Vitamin B5",
+"unit": "mg",
+"group": "Vitamins",
+"reference": 5.0,
+"kind": "target"
+},
+{
+"key": "vitB6",
+"label": "Vitamin B6",
+"unit": "mg",
+"group": "Vitamins",
+"reference": 1.3,
+"kind": "target"
+},
+{
+"key": "b12",
+"label": "Vitamin B12",
+"unit": "µg",
+"group": "Vitamins",
+"reference": 2.4,
+"kind": "target"
+},
+{
+"key": "folate",
+"label": "Folate",
+"unit": "µg",
+"group": "Vitamins",
+"reference": 400.0,
+"kind": "target"
+},
+{
+"key": "vitC",
+"label": "Vitamin C",
+"unit": "mg",
+"group": "Vitamins",
+"reference": 90.0,
+"kind": "target"
+},
+{
+"key": "vitD",
+"label": "Vitamin D",
+"unit": "µg",
+"group": "Vitamins",
+"reference": 15.0,
+"kind": "target"
+},
+{
+"key": "vitE",
+"label": "Vitamin E",
+"unit": "mg",
+"group": "Vitamins",
+"reference": 15.0,
+"kind": "target"
+},
+{
+"key": "vitK",
+"label": "Vitamin K",
+"unit": "µg",
+"group": "Vitamins",
+"reference": 120.0,
+"kind": "target"
+},
+{
+"key": "sodium",
+"label": "Sodium",
+"unit": "mg",
+"group": "Minerals",
+"reference": 2300.0,
+"kind": "limit"
+},
+{
+"key": "potassium",
+"label": "Potassium",
+"unit": "mg",
+"group": "Minerals",
+"reference": 3400.0,
+"kind": "target"
+},
+{
+"key": "calcium",
+"label": "Calcium",
+"unit": "mg",
+"group": "Minerals",
+"reference": 1000.0,
+"kind": "target"
+},
+{
+"key": "magnesium",
+"label": "Magnesium",
+"unit": "mg",
+"group": "Minerals",
+"reference": 420.0,
+"kind": "target"
+},
+{
+"key": "phosphorus",
+"label": "Phosphorus",
+"unit": "mg",
+"group": "Minerals",
+"reference": 700.0,
+"kind": "target"
+},
+{
+"key": "iron",
+"label": "Iron",
+"unit": "mg",
+"group": "Minerals",
+"reference": 8.0,
+"kind": "target"
+},
+{
+"key": "zinc",
+"label": "Zinc",
+"unit": "mg",
+"group": "Minerals",
+"reference": 11.0,
+"kind": "target"
+},
+{
+"key": "copper",
+"label": "Copper",
+"unit": "mg",
+"group": "Minerals",
+"reference": 0.9,
+"kind": "target"
+},
+{
+"key": "manganese",
+"label": "Manganese",
+"unit": "mg",
+"group": "Minerals",
+"reference": 2.3,
+"kind": "target"
+},
+{
+"key": "iodine",
+"label": "Iodine",
+"unit": "µg",
+"group": "Minerals",
+"reference": 150.0,
+"kind": "target"
+},
+{
+"key": "selenium",
+"label": "Selenium",
+"unit": "µg",
+"group": "Minerals",
+"reference": 55.0,
+"kind": "target"
+},
+{
+"key": "caffeine",
+"label": "Caffeine",
+"unit": "mg",
+"group": "Other",
+"reference": 400.0,
+"kind": "limit"
+},
+{
+"key": "alcohol",
+"label": "Alcohol",
+"unit": "g",
+"group": "Other",
+"reference": 0.0,
+"kind": "info"
+},
+{
+"key": "water",
+"label": "Water",
+"unit": "g",
+"group": "Other",
+"reference": 0.0,
+"kind": "info"
+}
+]
