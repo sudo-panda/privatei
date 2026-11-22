@@ -84,7 +84,16 @@ async function start() {
     const rolled = await rollDay().catch(() => false);
     if (current && !anySheetOpen() && (rolled || current.id === 'today')) current.refresh({ background: true });
   }, 60_000);
-  if (import.meta.env.MODE === 'mock') window.__bgRefresh = () => current && current.refresh({ background: true });
+  if (import.meta.env.MODE === 'mock') {
+    window.__bgRefresh = () => current && current.refresh({ background: true });
+    // Timing hook for UI tests: switch tab, wait for its data and render, force layout.
+    window.__showTimed = async (id) => {
+      const t0 = performance.now();
+      await show(id);
+      void document.body.offsetHeight;
+      return performance.now() - t0;
+    };
+  }
   document.body.dataset.ready = '1';
 }
 

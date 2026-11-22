@@ -353,24 +353,18 @@ test('3000 log rows: every tab renders in under 400 ms', async ({ page }) => {
   for (const t of ['add', 'meds', 'stock', 'week', 'shop', 'today']) await tab(page, t).click();
   await page.evaluate(() => document.fonts.ready);
   for (const t of ['add', 'meds', 'stock', 'week', 'shop', 'today']) {
-    const ms = await page.evaluate(async (name) => {
-      const t0 = performance.now();
-      document.querySelector(`nav.tabs button[data-tab="${name}"]`).click();
-      // Wait for the screen's refresh to land: two frames after the data call resolves.
-      await new Promise((r) => setTimeout(r, 0));
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      return performance.now() - t0;
-    }, t);
+    const ms = await page.evaluate((name) => window.__showTimed(name), t);
     expect(ms, `render time for ${t}`).toBeLessThan(400);
   }
-  await tab(page, 'week').click();
+  await page.evaluate(() => window.__showTimed('week'));
   const ms = await page.evaluate(async () => {
     const t0 = performance.now();
     document.querySelector('[data-mode="history"]').click();
     await new Promise((r) => setTimeout(r, 0));
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await window.__bgRefresh();
+    void document.body.offsetHeight;
     return performance.now() - t0;
   });
-  expect(ms).toBeLessThan(400);
+  expect(ms, 'render time for history').toBeLessThan(400);
   await expect(page.locator('[data-hist]').first()).toBeVisible();
 });
