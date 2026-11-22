@@ -44,11 +44,19 @@ Search thousands of foods when you add food or plan meals:
 - **USDA FoodData Central** (SR Legacy + Foundation, ~8,200 foods, 30–40 nutrients each) is
   built in. Public domain; source: U.S. Department of Agriculture, Agricultural Research
   Service, FoodData Central.
+- **UK CoFID 2021** (McCance and Widdowson, ~2,900 foods incl. many Indian dishes) is built in.
+  Contains public sector information licensed under the Open Government Licence v3.0.
 - **Swiss Food Composition Database** (~1,200 foods): Settings → Food databases → Download.
   Fetched from naehrwertdaten.ch (Federal Food Safety and Veterinary Office FSVO) and kept on
   your Mac; it isn't redistributed with the app.
 
-Your built-in food table and foods the AI has worked out are searched first. A nutrient a
+- **Open Food Facts** (packaged products, Swiss ones first, or by barcode): "Search packaged
+  products online" under the search results. Products you look up are kept on your Mac.
+  Data © Open Food Facts contributors, Open Database License.
+- **Recipes** (Kitchen → Recipes): build a dish from ingredients, weigh the finished pot, and
+  log a serving like any food.
+
+Your recipes, built-in food table and foods the AI has worked out are searched first. A nutrient a
 database doesn't have is shown as unknown, never as zero.
 
 ## Keyboard

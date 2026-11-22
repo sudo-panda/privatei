@@ -61,6 +61,12 @@ tests/fixtures/         made-up sample export (never real data)
 - `importers.rs` (feature `import`): USDA CSV and Swiss xlsx (calamine). Build the shipped DB with
   `npm run build:fooddb` (downloads USDA SR Legacy + Foundation into `target/fooddb`).
   The Swiss DB is downloaded by the app from naehrwertdaten.ch, not redistributed.
+- Shipped DB = USDA + UK CoFID (OGL v3, attribution shown in Settings). `off.rs` looks up
+  Open Food Facts online (network outside the Core lock, then `Core::save_off` caches into the
+  writable DB as source "off", ODbL). German BLS sits behind a proof-of-work bot check on
+  OpenAgrar: never automate past it; it needs a user-picked file import (not built yet).
+- Recipes (`Recipe`, table `recipes`, schema v2) keep each ingredient's nutrition snapshot;
+  `recipe:<id>` refs work in search/add_food like database foods.
 - Not allowed to ship: India IFCT 2017 (NIN copyright). Open Food Facts is ODbL (share-alike):
   keep any cache in its own file with attribution.
 - The mock uses `ui/tests/fixtures/usda-sample.json` (public-domain USDA subset) and
