@@ -206,10 +206,10 @@ function manualCard() {
   );
 }
 
-async function refresh() {
+async function refresh(opts = {}) {
   if (!state.date) state.date = state.today;
   els.target.textContent = `Logging to ${dayLabel(state.date, state.today)}`;
-  const [recent, names] = await Promise.all([call('recent_foods'), els.names.childElementCount ? null : call('food_names')]);
+  const [recent, names] = await Promise.all([call('recent_foods'), opts.background ? null : call('food_names')]);
   fill(
     els.recent,
     recent.length
