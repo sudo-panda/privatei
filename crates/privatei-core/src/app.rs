@@ -172,13 +172,35 @@ pub struct RecentFood {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EstimateView {
-    pub items: Vec<Item>,
+    pub items: Vec<DraftItem>,
     pub unknown: Vec<String>,
     pub note: String,
     pub provider: Option<String>,
     pub provider_text: Option<String>,
     pub error: Option<String>,
     pub meal: String,
+}
+
+/// One row of the Add food draft. Matched rows carry their database food, other foods
+/// it could be, and that food's portions, so the row can be changed like in a food diary.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftItem {
+    #[serde(flatten)]
+    pub item: Item,
+    /// Where the numbers come from: "USDA", "Built-in table"…; None for an AI estimate.
+    pub source_name: Option<String>,
+    pub alts: Vec<FoodChoice>,
+    pub portions: Vec<crate::fooddb::Portion>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FoodChoice {
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub name: String,
+    pub source_name: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1091,7 +1113,7 @@ impl Core {
                     ts: now + i as i64,
                     fiber: it.fiber.filter(|f| f.is_finite()).map(|f| round1(f.clamp(0.0, 300.0))),
                     nut: it.nut.as_ref().map(nutrients::clean).filter(|n| !n.is_empty()),
-                    food_ref: None,
+                    food_ref: it.food_ref.as_deref().map(|r| ai::clip(r, 80)).filter(|r| !r.is_empty()),
                 };
                 s.put(&new_id(), log)?;
                 n += 1;
@@ -1286,8 +1308,10 @@ impl Core {
 
     /// Merge the AI answer (if any) with the local estimate and learn new foods.
     pub fn finish_estimate(&mut self, p: Pending, answer: Option<std::result::Result<AiAnswer, String>>) -> EstimateView {
+        // Rows worked out on the Mac come from the built-in table or foods you've taught it.
+        let local: Vec<DraftItem> = p.local.items.iter().map(|it| self.local_draft(it)).collect();
         let mut view = EstimateView {
-            items: p.local.items.clone(),
+            items: local,
             unknown: p.local.unknown.clone(),
             note: String::new(),
             provider: None,
@@ -1303,8 +1327,11 @@ impl Core {
                 if items.is_empty() {
                     view.error = Some(format!("{} couldn't place that food.", ans.provider.label()));
                 } else {
-                    self.learn(&items, ans.provider.id());
-                    view.items.extend(items);
+                    // Only foods with no database match are learned (their numbers are the AI's).
+                    let rows: Vec<DraftItem> = items.into_iter().map(|it| self.match_draft(it)).collect();
+                    let unmatched: Vec<Item> = rows.iter().filter(|r| r.item.food_ref.is_none()).map(|r| r.item.clone()).collect();
+                    self.learn(&unmatched, ans.provider.id());
+                    view.items.extend(rows);
                     view.unknown.clear();
                     view.note = note;
                     view.provider = Some(ans.provider.id().into());
@@ -1313,6 +1340,97 @@ impl Core {
             }
         }
         view
+    }
+
+    /// A row from the local estimate, linked to its table or learned food when there is one.
+    fn local_draft(&self, it: &Item) -> DraftItem {
+        let base = food::base_name(&it.name).to_lowercase();
+        let reference = std::iter::once(format!("table:{base}"))
+            .chain(self.store.all::<Food>().filter(|(_, f)| f.name.eq_ignore_ascii_case(&base)).map(|(id, _)| format!("mine:{id}")))
+            .find(|r| self.builtin_food(r).is_some());
+        match reference.and_then(|r| Some((self.builtin_food(&r)?, r))) {
+            Some((f, r)) => DraftItem {
+                item: Item { food_ref: Some(r), ..it.clone() },
+                source_name: Some(f.source_name),
+                alts: vec![],
+                portions: f.portions,
+            },
+            None => DraftItem { item: it.clone(), source_name: None, alts: vec![], portions: vec![] },
+        }
+    }
+
+    /// Look an AI item up in the databases by the name the AI gave. A match replaces the
+    /// AI's numbers with the database's for the same grams; no match keeps the AI estimate.
+    fn match_draft(&self, it: Item) -> DraftItem {
+        let fallback = |it: Item| DraftItem { item: it, source_name: None, alts: vec![], portions: vec![] };
+        let (Some(q), Some(grams)) = (it.query.clone(), it.grams) else { return fallback(it) };
+        // "chicken breast, roasted" → try all words, then drop words from the end until something matches.
+        let words: Vec<&str> = q.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+        let mut hits = vec![];
+        for n in (1..=words.len()).rev() {
+            hits = self.search_foods(&words[..n].join(" "), 8);
+            if !hits.is_empty() {
+                break;
+            }
+        }
+        let Some(best) = hits.first() else { return fallback(it) };
+        let Ok(mut row) = self.draft_item(&best.reference, grams, &it.meal) else { return fallback(it) };
+        row.item.est = it.est;
+        row.alts = hits
+            .iter()
+            .map(|h| FoodChoice { reference: h.reference.clone(), name: h.name.clone(), source_name: h.source_name.clone() })
+            .collect();
+        row
+    }
+
+    /// A draft row for a database food and amount: numbers from the database, never the AI.
+    pub fn draft_item(&self, reference: &str, grams: f64, meal: &str) -> Result<DraftItem> {
+        if !(grams > 0.0 && grams <= 5000.0) {
+            return Err("Grams must be between 1 and 5000.".into());
+        }
+        let f = self.food_detail(reference).ok_or("That food isn't in your databases any more.")?;
+        let k = grams / 100.0;
+        let mut nut = nutrients::scale(&f.nut100, k);
+        let fiber = nut.remove("fiber").map(round1);
+        Ok(DraftItem {
+            item: Item {
+                name: format!("{} · {} g", f.name, food::fmt_num(grams.round())),
+                grams: Some(grams.round()),
+                kcal: (f.kcal100 * k).round(),
+                prot: round1(f.prot100 * k),
+                est: false,
+                meal: valid_meal(meal, &self.hhmm()),
+                fiber,
+                nut: (!nut.is_empty()).then_some(nut),
+                food_ref: Some(f.reference.clone()),
+                query: None,
+            },
+            source_name: Some(f.source_name),
+            alts: vec![],
+            portions: f.portions,
+        })
+    }
+
+    /// Change the amount of a row that has no database food (an AI estimate): everything scales.
+    pub fn rescale_item(&self, item: Item, grams: f64) -> Result<Item> {
+        if !(grams > 0.0 && grams <= 5000.0) {
+            return Err("Grams must be between 1 and 5000.".into());
+        }
+        let old = item.grams.filter(|g| *g > 0.0).ok_or("This row has no weight to scale from.")?;
+        let f = grams / old;
+        let name = match item.name.rsplit_once(" · ") {
+            Some((base, tail)) if tail.ends_with(" g") => format!("{base} · {} g", food::fmt_num(grams.round())),
+            _ => item.name.clone(),
+        };
+        Ok(Item {
+            name,
+            grams: Some(grams.round()),
+            kcal: (item.kcal * f).round(),
+            prot: round1(item.prot * f),
+            fiber: item.fiber.map(|x| round1(x * f)),
+            nut: item.nut.as_ref().map(|n| nutrients::scale(n, f)),
+            ..item
+        })
     }
 
     fn learn(&mut self, items: &[Item], src: &str) {

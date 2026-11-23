@@ -294,7 +294,8 @@ function place(part) {
     if (!t.includes(name)) continue;
     const grams = g ? Number(g[1]) : piece ? (n ? Number(n[1]) : 1) * piece : null;
     if (!grams) return null;
-    return { name: `${name[0].toUpperCase()}${name.slice(1)} · ${grams} g`, grams, kcal: Math.round(k * grams / 100), prot: r1(p * grams / 100), est: !g, meal: guess(HHMM), ...nutr(name, grams) };
+    const f = foodByRef(`table:${name}`);
+    return { name: `${name[0].toUpperCase()}${name.slice(1)} · ${grams} g`, grams, kcal: Math.round(k * grams / 100), prot: r1(p * grams / 100), est: !g, meal: guess(HHMM), ...nutr(name, grams), foodRef: f.ref, sourceName: f.sourceName, alts: [], portions: f.portions };
   }
   return null;
 }
@@ -321,7 +322,7 @@ function estimate({ text }) {
   const v = { items, unknown, note: '', provider: null, providerText: null, error: null, meal: guess(HHMM) };
   if (unknown.length) {
     if (db.aiAvailable) {
-      for (const u of unknown) v.items.push({ name: u.slice(0, 80), grams: 250, kcal: 400, prot: 20, est: true, meal: guess(HHMM), fiber: 6, nut: { vitC: 12, b12: 0.4, iron: 2.1, calcium: 80, sodium: 650, addedSugar: 4, satFat: 3.5 } });
+      for (const u of unknown) v.items.push(fakeAi(u));
       v.unknown = [];
       v.provider = 'claude';
       v.providerText = 'Claude worked it out';
@@ -330,6 +331,44 @@ function estimate({ text }) {
     }
   }
   return v;
+}
+
+// Stands in for the AI: reads the amount, names the food plainly, and the app (like the
+// core's match_draft) looks it up; only foods with no match keep the "AI" numbers.
+const FILLER = new Set(['a', 'an', 'the', 'of', 'some', 'bowl', 'plate', 'cup', 'cups', 'glass', 'handful', 'portion', 'serving', 'piece', 'pieces', 'slice', 'slices', 'small', 'big', 'large', 'little', 'my', 'and', 'with', 'g', 'gram', 'grams']);
+function fakeAi(u) {
+  const t = u.toLowerCase();
+  const g = t.match(/(\d+(?:\.\d+)?)\s*g\b/);
+  const n = t.match(/^(\d+)\s/);
+  const grams = g ? Number(g[1]) : (n ? Number(n[1]) : 1) * (/\bbowl|plate\b/.test(t) ? 300 : 150);
+  const words = t.replace(/[^a-z\u00e0-\u00ff ]+/g, ' ').split(/\s+/).filter((w) => w && !FILLER.has(w));
+  // Like the core: all the words, then drop words from the end until something matches.
+  for (let len = words.length; len >= 1; len--) {
+    const hits = searchFoods(words.slice(0, len).join(' ')).slice(0, 8);
+    if (hits.length) {
+      const row = draftItem({ reference: hits[0].ref, grams, meal: guess(HHMM) });
+      return { ...row, est: !g, alts: hits.map((x) => ({ ref: x.ref, name: x.name, sourceName: x.sourceName })) };
+    }
+  }
+  const name = u.trim().slice(0, 80);
+  return { name, grams, kcal: Math.round(grams * 1.6), prot: r1(grams * 0.07), est: true, meal: guess(HHMM), fiber: r1(grams * 0.02), foodRef: null, sourceName: null, alts: [], portions: [] };
+}
+
+function draftItem({ reference, grams, meal: m }) {
+  if (!(grams > 0 && grams <= 5000)) throw 'Grams must be between 1 and 5000.';
+  const f = foodByRef(reference);
+  if (!f) throw "That food isn't in your databases any more.";
+  const k = grams / 100;
+  const nut = Object.fromEntries(Object.entries(f.nut100).filter(([key]) => key !== 'fiber').map(([key, v]) => [key, Math.round(v * k * 1000) / 1000]));
+  return { name: `${f.name} · ${Math.round(grams)} g`, grams: Math.round(grams), kcal: Math.round(f.kcal100 * k), prot: r1(f.prot100 * k), est: false, meal: meal(m), fiber: f.nut100.fiber != null ? r1(f.nut100.fiber * k) : null, nut, foodRef: f.ref, sourceName: f.sourceName, alts: [], portions: f.portions };
+}
+
+function rescaleItem({ item, grams }) {
+  if (!(grams > 0 && grams <= 5000)) throw 'Grams must be between 1 and 5000.';
+  if (!(item.grams > 0)) throw 'This row has no weight to scale from.';
+  const f = grams / item.grams;
+  const m = item.name.match(/^(.*) · [\d.]+ g$/);
+  return { ...item, name: m ? `${m[1]} · ${Math.round(grams)} g` : item.name, grams: Math.round(grams), kcal: Math.round(item.kcal * f), prot: r1(item.prot * f), fiber: item.fiber != null ? r1(item.fiber * f) : null, nut: item.nut ? Object.fromEntries(Object.entries(item.nut).map(([k, v]) => [k, v * f])) : null };
 }
 
 function medsView() {
@@ -539,7 +578,7 @@ const handlers = {
     return lid;
   },
   save_items: ({ date, items }) => {
-    for (const it of items) db.log[id()] = { date, meal: meal(it.meal), name: it.name, grams: it.grams, kcal: it.kcal, prot: it.prot, est: it.est, ts: db.ts++, fiber: it.fiber, nut: it.nut };
+    for (const it of items) db.log[id()] = { date, meal: meal(it.meal), name: it.name, grams: it.grams, kcal: it.kcal, prot: it.prot, est: it.est, ts: db.ts++, fiber: it.fiber, nut: it.nut, foodRef: it.foodRef ?? null };
     return items.length;
   },
   delete_log: ({ id: lid }) => {
@@ -686,6 +725,8 @@ const handlers = {
   get_history: history,
   get_plan_ahead: planAhead,
   search_foods: ({ query }) => searchFoods(query),
+  draft_item: draftItem,
+  rescale_item: rescaleItem,
   food_detail: ({ reference }) => foodByRef(reference),
   add_food: ({ date, meal: m, reference, grams }) => {
     const f = foodByRef(reference);

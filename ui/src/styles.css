@@ -546,3 +546,18 @@ input[aria-invalid="true"] { border-color: var(--over); }
 .plan-day { display: flex; flex-direction: column; gap: 10px; }
 .plan-day-chips .chip { font-size: 13px; }
 .plan-add .small-btn { align-self: flex-start; }
+
+/* Add food draft: one editable line per food, like a food diary. */
+.draft-rows { display: flex; flex-direction: column; }
+.draft-hint { margin-bottom: 6px; }
+.draft-row { border-top: 1px solid var(--line); padding: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.draft-line1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.draft-food { flex: 1; min-width: 0; justify-content: flex-start; text-align: left; padding: 4px 6px; min-height: 32px; font-weight: 600; }
+.draft-food span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline dotted color-mix(in srgb, var(--muted) 60%, transparent); text-underline-offset: 3px; }
+.draft-num { white-space: nowrap; }
+.draft-line2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-left: 6px; }
+.draft-line2 .draft-amount { width: 84px; }
+.draft-line2 .draft-unit { width: 190px; }
+.draft-line2 .draft-meal { width: auto; }
+.draft-total { border-top: 1px solid var(--line); padding-top: 8px; }
+@media (max-width: 759px) { .draft-num { display: none; } .draft-line2 .draft-unit { width: 150px; } }

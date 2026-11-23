@@ -346,6 +346,12 @@ pub struct Item {
     pub fiber: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nut: Option<Nut>,
+    /// The database food this came from ("usda:167512"), so the row can be changed later.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub food_ref: Option<String>,
+    /// What the AI said to look up in the databases (not sent to the UI).
+    #[serde(skip)]
+    pub query: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -505,6 +511,8 @@ pub fn local_estimate(text: &str, hhmm: &str, learned: &[Food]) -> LocalEstimate
             meal: meal.clone(),
             fiber,
             nut,
+            food_ref: None,
+            query: None,
         }
     };
     for group in split_dishes(text) {
@@ -715,6 +723,8 @@ mod tests {
             meal: "Snack".into(),
             fiber: None,
             nut: None,
+            food_ref: None,
+            query: None,
         };
         let f = learn_from(&item, "claude", 1).unwrap();
         assert_eq!((f.name.as_str(), f.kcal100, f.prot100, f.piece), ("Protein pudding", 80.0, 10.0, 200.0));
@@ -727,6 +737,8 @@ mod tests {
             meal: "Snack".into(),
             fiber: None,
             nut: None,
+            food_ref: None,
+            query: None,
         };
         assert_eq!(learn_from(&item, "gemini", 1).unwrap().piece, 0.0);
         let covered = Item {
@@ -738,6 +750,8 @@ mod tests {
             meal: "Lunch".into(),
             fiber: None,
             nut: None,
+            food_ref: None,
+            query: None,
         };
         assert!(learn_from(&covered, "claude", 1).is_none());
         let no_grams = Item { grams: None, ..item };

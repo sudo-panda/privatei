@@ -431,7 +431,7 @@ fn fiber_and_nutrients_on_the_day() {
     let mut c = core("2026-11-22", "08:00");
     let p = c.prepare_estimate("80g oats, 200g frozen raspberries").unwrap();
     let v = c.finish_estimate(p, None);
-    c.save_items("2026-11-22", v.items).unwrap();
+    c.save_items("2026-11-22", v.items.into_iter().map(|r| r.item).collect()).unwrap();
     let d = c.day("2026-11-22").unwrap();
     assert!(d.fiber_known);
     assert_eq!(d.fiber, 21.1); // 8.1 + 13.0
@@ -496,7 +496,7 @@ fn history_insights_point_at_what_is_missing() {
         // Low protein most days, low fiber, a little vitamin C.
         let p = c.prepare_estimate(&format!("150g rice cooked, {} g chicken breast, 1 apple", if i % 3 == 0 { 300 } else { 150 })).unwrap();
         let v = c.finish_estimate(p, None);
-        c.save_items(&d, v.items).unwrap();
+        c.save_items(&d, v.items.into_iter().map(|r| r.item).collect()).unwrap();
         if i % 4 != 0 {
             c.toggle_dose(&d, &mid).unwrap();
         }

@@ -66,6 +66,16 @@ fn delete_log(s: State<AppState>, id: String) -> R<()> {
 }
 
 #[tauri::command]
+fn draft_item(s: State<AppState>, reference: String, grams: f64, meal: String) -> R<privatei_core::app::DraftItem> {
+    with(&s, |c| c.draft_item(&reference, grams, &meal))
+}
+
+#[tauri::command]
+fn rescale_item(s: State<AppState>, item: privatei_core::food::Item, grams: f64) -> R<privatei_core::food::Item> {
+    with(&s, |c| c.rescale_item(item, grams))
+}
+
+#[tauri::command]
 fn set_shop_day(s: State<AppState>, date: String, trip: Option<u8>) -> R<()> {
     with(&s, |c| c.set_shop_day(&date, trip))
 }
@@ -478,6 +488,8 @@ fn main() {
             toggle_plan,
             set_sleep,
             set_shop_day,
+            draft_item,
+            rescale_item,
             plan_food,
             clear_sleep,
             set_plan,

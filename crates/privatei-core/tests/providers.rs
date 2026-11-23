@@ -243,7 +243,7 @@ fn core_estimate_local_first_then_ai_and_learns() {
     let ans = ai::ask(&cfg, &req);
     let v = core.finish_estimate(p, Some(ans));
     assert_eq!(v.items.len(), 2);
-    assert_eq!(v.items[1].meal, "Breakfast", "invalid slot replaced by the time guess");
+    assert_eq!(v.items[1].item.meal, "Breakfast", "invalid slot replaced by the time guess");
     assert_eq!(v.provider_text.as_deref(), Some("Claude worked it out"));
     assert!(v.unknown.is_empty());
     let sent = std::fs::read_to_string(&args).unwrap();
@@ -296,4 +296,56 @@ fn open_food_facts_barcode_lookup() {
     assert_eq!(saved[0].reference, "off:7610032000001");
     assert_eq!(core.search_foods("skyr nature", 5).iter().filter(|f| f.source == "off").count(), 1);
     assert!(privatei_core::off::fetch("x", &base).unwrap().is_empty(), "too short to search");
+}
+
+#[cfg(feature = "cli")]
+#[test]
+fn ai_items_are_matched_to_database_foods_and_rows_can_change() {
+    use privatei_core::app::{AiSettingsInput, Clock};
+    let dir = tmpdir("match");
+    // The AI names a database food for the lentils, and nothing for a branded pudding.
+    let script = "printf '%s\\n' '{\"type\":\"result\",\"is_error\":false,\"result\":\"{\\\"items\\\":[{\\\"name\\\":\\\"Red lentil dal\\\",\\\"food\\\":\\\"lentils, cooked, boiled\\\",\\\"grams\\\":200,\\\"kcal\\\":400,\\\"prot\\\":20,\\\"est\\\":true,\\\"meal\\\":\\\"Dinner\\\"},{\\\"name\\\":\\\"Ehrmann protein pudding\\\",\\\"food\\\":null,\\\"grams\\\":200,\\\"kcal\\\":160,\\\"prot\\\":20,\\\"est\\\":false,\\\"meal\\\":\\\"Snack\\\"}],\\\"note\\\":\\\"\\\"}\"}'";
+    let bin = fake_claude(&dir, script);
+    let mut core = privatei_core::Core::in_memory();
+    core.foods = Some(privatei_core::fooddb::sample_db());
+    core.set_clock(Clock::Fixed { today: "2026-11-22".into(), hhmm: "19:00".into() });
+    core.save_ai_settings(AiSettingsInput {
+        order: vec!["claude".into()],
+        gemini_key: String::new(),
+        clear_gemini_key: false,
+        gemini_model: String::new(),
+        claude_model: String::new(),
+        claude_path: bin.display().to_string(),
+    })
+    .unwrap();
+    let p = core.prepare_estimate("a bowl of red lentil dal and an Ehrmann pudding").unwrap();
+    let (cfg, req) = p.ai.clone().unwrap();
+    assert!(req.prompt.contains("\"food\""), "the prompt asks for a database name");
+    let v = core.finish_estimate(p, Some(ai::ask(&cfg, &req)));
+    assert_eq!(v.items.len(), 2);
+    let dal = &v.items[0];
+    let lentils = core.food_detail(dal.item.food_ref.as_deref().unwrap()).unwrap();
+    assert!(lentils.name.starts_with("Lentils"), "{}", lentils.name);
+    assert_eq!(dal.item.kcal, (lentils.kcal100 * 2.0).round(), "database numbers, not the AI's 400");
+    assert_eq!(dal.item.meal, "Dinner");
+    assert!(dal.source_name.is_some() && !dal.alts.is_empty());
+    let pudding = &v.items[1];
+    assert!(pudding.item.food_ref.is_none() && pudding.source_name.is_none());
+    assert_eq!(pudding.item.kcal, 160.0, "no match keeps the AI estimate");
+    // Change a matched row's amount, or its food; scale an unmatched one.
+    let half = core.draft_item(dal.item.food_ref.as_deref().unwrap(), 100.0, "Dinner").unwrap();
+    assert_eq!(half.item.kcal, lentils.kcal100.round());
+    assert!(half.item.name.ends_with("· 100 g"));
+    let chick = core.draft_item("usda:1", 150.0, "Lunch").unwrap();
+    assert_eq!(chick.item.meal, "Lunch");
+    let small = core.rescale_item(pudding.item.clone(), 100.0).unwrap();
+    assert_eq!((small.kcal, small.prot), (80.0, 10.0));
+    assert!(core.draft_item("usda:999", 100.0, "Lunch").is_err());
+    // Saving keeps the link to the database food.
+    core.save_items("2026-11-22", vec![half.item.clone(), small]).unwrap();
+    let day = core.day("2026-11-22").unwrap();
+    let rows: Vec<_> = day.meals.iter().flat_map(|m| &m.rows).collect();
+    assert_eq!(rows.len(), 2);
+    let logged = core.store.all::<privatei_core::model::Log>().find(|(_, l)| l.name.ends_with("· 100 g") && l.food_ref.is_some());
+    assert!(logged.is_some(), "the matched row keeps its food_ref");
 }

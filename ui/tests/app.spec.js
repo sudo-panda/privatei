@@ -69,14 +69,15 @@ test.describe('Add', () => {
   test('describe → local + AI draft → save', async ({ page }) => {
     await open(page);
     await tab(page, 'add').click();
-    await page.locator('#describe').fill('200g chicken breast, mystery stew');
+    await page.locator('#describe').fill('200g chicken breast, zorblax casserole');
     await page.getByRole('button', { name: 'Work out the calories' }).click();
     const draft = page.locator('#draft');
     await expect(draft.getByTestId('provider')).toHaveText('Claude worked it out');
     await expect(draft.locator('[data-draft]')).toHaveCount(2);
-    await expect(draft.getByTestId('draft-total')).toHaveText('730 kcal · 82 g protein');
-    await draft.getByLabel('Remove mystery stew').click();
-    await expect(draft.getByTestId('draft-total')).toHaveText('330 kcal · 62 g protein');
+    // Nothing in the databases is called that, so it stays an AI estimate, marked as such.
+    await expect(draft.locator('[data-draft="1"]')).toContainText('AI estimate');
+    await draft.getByLabel('Remove zorblax casserole').click();
+    await expect(draft.getByTestId('draft-total')).toContainText('330 kcal · 62 g protein');
     await draft.getByRole('button', { name: 'Save' }).click();
     await expect(page.locator('#draft')).toBeHidden();
     await tab(page, 'today').click();
@@ -617,8 +618,11 @@ test('A dish with toppings stays one item; find it as a packaged product', async
   await page.evaluate(() => (window.__mock.aiAvailable = true));
   await page.getByRole('button', { name: 'Work out the calories' }).click();
   await expect(page.locator('[data-draft]')).toHaveCount(1);
-  await page.getByLabel(/Find 1 daemilio pizza with mushroom and ham as a packaged product/).click();
-  await expect(page.locator('#food-search')).toHaveValue('1 daemilio pizza with mushroom and ham');
+  // No database food has that name: an AI estimate you can swap for a packaged product.
+  await expect(page.locator('[data-draft="0"]')).toContainText('AI estimate');
+  await page.getByLabel(/Change food: 1 daemilio pizza with mushroom and ham/).click();
+  await expect(page.locator('#draft-food-q')).toHaveValue('1 daemilio pizza with mushroom and ham');
+  await expect(page.getByRole('button', { name: 'Look it up as a packaged product' })).toBeVisible();
 });
 
 test('Add food opens near the top, stays put as results come, and fits the window', async ({ page }) => {
@@ -645,7 +649,7 @@ test('Usual-food chips go into the draft next to what you described', async ({ p
   await page.getByRole('button', { name: 'Work out the calories' }).click();
   await expect(page.locator('#draft [data-draft]')).toHaveCount(1);
   const chip = page.locator('.overlay-sheet .chips .chip').first();
-  const name = (await chip.getAttribute('aria-label')).replace(/^Add | to the draft$/g, '');
+  const name = (await chip.getAttribute('aria-label')).replace(/^Add | to the draft$/g, '').split(' · ')[0];
   await chip.click();
   await expect(page.locator('#draft [data-draft]')).toHaveCount(2);
   await expect(page.locator('#draft')).toContainText(name);
@@ -1154,4 +1158,44 @@ test('Plan: a shopping day shows its trip with Open trip; the Log shows Open lis
   await expect(page.locator('[data-shop-day="2026-11-22"]')).toHaveCount(0);
   await tab(page, 'today').click();
   await expect(page.locator('.card[aria-label="Shopping today"]')).toBeHidden();
+});
+
+test('Draft lines work like a food diary: change the amount, unit, meal or the food itself', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&hhmm=19:00');
+  await page.locator('#open-add').click();
+  await page.locator('#describe').fill('a bowl of lentils');
+  await page.getByRole('button', { name: 'Work out the calories' }).click();
+  const row = page.locator('#draft [data-draft="0"]');
+  await expect(row).toContainText('USDA');
+  await expect(row).toContainText('amount guessed');
+  const kcalOf = async () => Number((await row.locator('.draft-num').textContent()).match(/^(\d+) kcal/)[1]);
+  const before = await kcalOf();
+  // Halve the grams: numbers come back from the database, the guess note goes.
+  const amount = row.locator('.draft-amount');
+  const grams = Number(await amount.inputValue());
+  await amount.fill(String(grams / 2));
+  await amount.press('Tab');
+  await expect.poll(kcalOf).toBe(Math.round(before / 2));
+  await expect(row).not.toContainText('amount guessed');
+  // The food's own portions are units too.
+  const units = await row.locator('.draft-unit option').allTextContents();
+  expect(units[0]).toBe('g');
+  if (units.length > 1) {
+    await row.locator('.draft-unit').selectOption({ index: 1 });
+    await expect(amount).toHaveValue('1');
+  }
+  await row.locator('.draft-meal').selectOption('Lunch');
+  // Swap the food for another match.
+  await row.locator('.draft-food').click();
+  const sheet = page.getByRole('dialog', { name: /Choose the food/ });
+  await sheet.locator('#draft-food-q').fill('chickpeas');
+  await expect(sheet.locator('.food-results').last().locator('.food-hit').first()).toContainText(/chickpea/i);
+  await sheet.locator('.food-results').last().locator('.food-hit').first().click();
+  await expect(row.locator('.draft-food')).toContainText('Chickpeas');
+  await expect(row.locator('.draft-meal')).toHaveValue('Lunch');
+  await page.locator('#draft').getByRole('button', { name: 'Save' }).click();
+  const saved = await page.evaluate(() => Object.values(window.__mock.log).find((l) => /Chickpeas/.test(l.name)));
+  expect(saved.meal).toBe('Lunch');
+  expect(saved.foodRef).toMatch(/^usda:/);
 });
