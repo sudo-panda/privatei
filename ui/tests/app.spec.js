@@ -1010,7 +1010,7 @@ test('The app opens in the Log · Plan · Kitchen · Meds · Training · History
   await expect(page.locator('.layout-switcher')).toHaveCount(0);
 });
 
-test('Desktop sidebar shows the app icon beside the name; narrow sidebar shows just the icon', async ({ page }) => {
+test('Desktop sidebar shows the app icon beside the name at the bottom; narrow sidebar shows just the icon', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await open(page, 'seed=demo&layout=new');
   const icon = page.locator('nav.tabs .brand-icon');
@@ -1020,6 +1020,11 @@ test('Desktop sidebar shows the app icon beside the name; narrow sidebar shows j
   const tb = await page.locator('nav.tabs .brand span').boundingBox();
   expect(Math.abs(ib.y + ib.height / 2 - (tb.y + tb.height / 2))).toBeLessThan(4);
   expect(tb.x).toBeGreaterThan(ib.x + ib.width);
+  // At the foot of the sidebar, below every tab.
+  const nav = await page.locator('nav.tabs').boundingBox();
+  const lastTab = await page.locator('nav.tabs button[data-tab]').last().boundingBox();
+  expect(ib.y).toBeGreaterThan(lastTab.y + lastTab.height);
+  expect(nav.y + nav.height - (ib.y + ib.height)).toBeLessThan(40);
   await page.setViewportSize({ width: 860, height: 800 });
   await expect(icon).toBeVisible();
   await expect(page.locator('nav.tabs .brand span')).toBeHidden();
