@@ -28,8 +28,12 @@ function chartCard(title, sub, chart) {
   return h('div', { class: 'card', 'aria-label': title }, h('div', { class: 'row spread wrap' }, h('h2', { text: title }), h('span', { class: 'small muted', text: sub })), chart);
 }
 
+let seq = 0;
+
 async function refresh() {
+  const my = ++seq;
   const hist = await call('get_history', { range });
+  if (my !== seq) return; // switched period again while this one loaded
   const s = hist.summary;
   const days = [...hist.days].reverse(); // oldest first for charts
   const food = s.foodDays;
@@ -90,7 +94,7 @@ async function refresh() {
           pctBars(rows.map((m) => ({
             label: m.label,
             value: m.pct,
-            text: `${n0(m.pct)}% · ${n1(m.amount)} ${m.unit}${m.coverage < 0.8 ? ' · partial' : ''}`,
+            text: `${m.coverage < 0.8 ? '≈' : ''}${n0(m.pct)}% · ${n1(m.amount)} ${m.unit}`,
             tone: m.kind === 'limit' ? (m.pct > 100 ? 'short' : m.pct > 80 ? 'mid' : 'ok') : m.pct < 60 ? 'short' : m.pct < 100 ? 'mid' : 'ok',
           })), { title: g }));
       }))
@@ -105,7 +109,8 @@ async function refresh() {
     h('div', { class: 'list' }, hist.days.map((d) =>
       h('button', {
         type: 'button', class: 'item ghost day-row', style: 'text-align:left;border-radius:0;min-height:40px', 'data-hist': d.date,
-        'aria-label': `Open ${dayLabel(d.date, state.today)} in Log`,
+        // The label is all a screen reader hears, so it carries the numbers too.
+        'aria-label': [`Open ${dayLabel(d.date, state.today)} in Log`, `${n0(d.kcal)} kcal`, `${n1(d.prot)} g protein`, d.fiber === null ? null : `${n1(d.fiber)} g fiber`, d.mins ? `${n0(d.mins)} min trained` : null, d.due ? `meds ${d.taken} of ${d.due}` : null].filter(Boolean).join(', '),
         onclick: () => { state.date = d.date; go('today'); },
       },
       h('span', { class: 'name' }, h('b', { text: dayLabel(d.date, state.today) }), h('div', { class: 'meta', text: [d.mins ? `${n0(d.mins)} min trained` : null, d.due ? `meds ${d.taken}/${d.due}` : null].filter(Boolean).join(' · ') })),
@@ -117,11 +122,11 @@ async function refresh() {
     els.body,
     tiles,
     h('div', { class: 'cols' },
-      h('div', { class: 'col' }, insights, h('div', { class: 'card', 'aria-label': 'Nutrients' }, h('div', { class: 'row spread wrap' }, h('h2', { text: 'Nutrients' }), h('span', { class: 'small muted', text: 'daily average vs reference · limits marked · food only' })), nutrients), h('div', { class: 'card', 'aria-label': 'Medicines taken' }, h('h2', { text: 'Medicines taken' }), meds)),
+      h('div', { class: 'col' }, insights, h('div', { class: 'card', 'aria-label': 'Nutrients' }, h('div', { class: 'row spread wrap' }, h('h2', { text: 'Nutrients' }), h('span', { class: 'small muted', text: 'daily average vs reference · ≈ some foods lack data · food only' })), nutrients), h('div', { class: 'card', 'aria-label': 'Medicines taken' }, h('h2', { text: 'Medicines taken' }), meds)),
       h('div', { class: 'col' },
         chartCard('Calories', 'red = over target', kcal),
-        chartCard('Protein', `line = ${n0(hist.protFloor)} g floor`, prot),
-        chartCard('Fiber', `line = ${n0(hist.fiberFloor)} g floor`, fiber),
+        chartCard('Protein', `line = ${n0(hist.protFloor)} g floor · faded = under it`, prot),
+        chartCard('Fiber', `line = ${n0(hist.fiberFloor)} g floor · faded = under it`, fiber),
         chartCard('Training', 'minutes per day', train))),
     dayList,
   );

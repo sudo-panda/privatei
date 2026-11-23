@@ -27,7 +27,7 @@ function mount(root, o = {}) {
   els.food = h('div', { class: 'card', 'aria-label': 'Food logged' });
   els.meds = h('div', { class: 'card hidden', 'aria-label': 'Medicines' });
   els.training = h('div', { class: 'card', 'aria-label': 'Training' });
-  root.append(h('div', { class: 'cols' }, h('div', { class: 'col' }, els.strip, els.nav, els.energy, els.plan, els.meds), h('div', { class: 'col' }, els.food, els.training)));
+  root.append(h('div', { class: 'cols log-cols' }, h('div', { class: 'col' }, els.strip, els.nav, els.energy, els.plan, els.meds), h('div', { class: 'col' }, els.food, els.training)));
   if (opts.addPanel) {
     // Adding food happens in an overlay, so the Log stays a clean record of the day.
     els.addOverlay = overlay('Add food');
@@ -100,9 +100,10 @@ function renderStrip() {
   const sel = track.querySelector('[aria-pressed="true"]');
   if (sel) {
     const pad = 4;
-    if (sel.offsetLeft < track.scrollLeft) track.scrollTo({ left: sel.offsetLeft - pad, behavior: 'smooth' });
+    const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    if (sel.offsetLeft < track.scrollLeft) track.scrollTo({ left: sel.offsetLeft - pad, behavior });
     else if (sel.offsetLeft + sel.offsetWidth > track.scrollLeft + track.clientWidth) {
-      track.scrollTo({ left: sel.offsetLeft + sel.offsetWidth - track.clientWidth + pad, behavior: 'smooth' });
+      track.scrollTo({ left: sel.offsetLeft + sel.offsetWidth - track.clientWidth + pad, behavior });
     }
   }
   // Fade an edge when days are hidden past it (e.g. between the visible days and Today).
@@ -228,7 +229,7 @@ function render() {
         h('span', { class: 'fn', text: g.meal }),
         cell(g.rows.length ? n0(g.kcal) : ''),
         cell(g.rows.length ? fx(g.prot) : ''),
-        cell('')),
+        cell(g.fiber != null ? fx(g.fiber) : '')),
       g.rows.length ? null : h('div', { class: 'food-empty small muted', text: 'Nothing yet' }),
       g.rows.map((r) => {
         const [name, amount] = split(r.name);

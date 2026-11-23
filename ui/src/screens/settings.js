@@ -222,7 +222,7 @@ function renderAi() {
       row('Claude model', null, claudeModel),
       row('Gemini key', 'Optional fallback.', keyBox),
       row('Gemini model', null, geminiModel),
-      h('details', { class: 'set-more' }, h('summary', { class: 'small', text: 'Use a different claude' }), row('Claude path', 'Full path to the claude program.', path)),
+      h('details', { class: 'set-more' }, h('summary', { class: 'small', text: 'Use a different Claude program' }), row('Claude path', 'Full path to the claude program.', path)),
       h('div', { class: 'set-row' }, h('div', { class: 'set-label' }, st), h('div', { class: 'set-control' }, test)),
     ),
   );

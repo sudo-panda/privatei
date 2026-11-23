@@ -723,3 +723,25 @@ fn edit_log_renames_the_amount_and_allows_zero_kcal() {
     assert_eq!(c.day("2026-11-22").unwrap().meals[1].rows[0].name, "Water");
     assert!(c.update_log(&id, edit("x", 10.0, -1.0)).is_err());
 }
+
+#[test]
+fn meal_fiber_subtotal_counts_known_rows_and_stays_unknown_without_any() {
+    let mut c = core("2026-11-22", "12:00");
+    let row = |name: &str, fiber: Option<f64>| LogInput {
+        meal: "Lunch".into(),
+        name: name.into(),
+        grams: None,
+        kcal: 100.0,
+        prot: 1.0,
+        est: false,
+        fiber,
+        nut: None,
+        food_ref: None,
+    };
+    c.add_log("2026-11-22", row("Lentils", Some(7.94))).unwrap();
+    c.add_log("2026-11-22", row("Rice", Some(0.6))).unwrap();
+    c.add_log("2026-11-22", row("Mystery", None)).unwrap();
+    let d = c.day("2026-11-22").unwrap();
+    assert_eq!(d.meals[1].fiber, Some(8.5));
+    assert_eq!(d.meals[0].fiber, None, "an empty meal's fiber is unknown, not 0");
+}

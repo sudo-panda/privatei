@@ -128,7 +128,8 @@ function show(id, opts = {}) {
   current = s;
   title.textContent = s.title;
   // The gear opens Settings; there's nothing to open while you're already on it.
-  document.getElementById('open-settings').classList.toggle('hidden', s.id === 'settings');
+  // Invisible rather than removed, so the header keeps its height.
+  document.getElementById('open-settings').classList.toggle('invisible', s.id === 'settings');
   if (s.id !== 'today') updateDateChip();
   main.scrollTop = 0;
   return s.refresh(opts);

@@ -4,16 +4,18 @@
   --surface: #F6F7FA;
   --line: #C4C8DA;
   --ink: #2F3A5F;
-  --muted: #5E6A9E;
-  --accent: #9854F1;
-  --energy: #B15C00;
-  --fiber: #2E7DE9;
-  --protein: #587539;
-  --warn: #B15C00;
-  --over: #F52A65;
-  --good: #587539;
+  /* Tokyo Night Day hues, a step darker where needed so text reads at 4.5:1 on --bg and --surface. */
+  --muted: #566090;
+  --accent: #7D45C6;
+  --energy: #9A5000;
+  --fiber: #2461B6;
+  --protein: #506A34;
+  --warn: #9A5000;
+  --over: #BD204E;
+  --good: #506A34;
   --on-accent: #FFFFFF;
-  --soft: rgba(152, 84, 241, 0.10);
+  --field-line: #7F87AC; /* input edges: 3:1 against the card */
+  --soft: rgba(125, 69, 198, 0.10);
   --shadow: 0 1px 2px rgba(47, 58, 95, 0.06), 0 2px 8px rgba(47, 58, 95, 0.05);
   --radius: 14px;
   --f-head: "Archivo", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
@@ -38,6 +40,7 @@
     --over: #F7768E;
     --good: #9ECE6A;
     --on-accent: #1A1B26;
+    --field-line: #6B75A3;
     --soft: rgba(187, 154, 247, 0.12);
     --shadow: none;
   }
@@ -61,6 +64,7 @@ h3 { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacin
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
 .hidden { display: none !important; }
+.invisible { visibility: hidden; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* Narrow (phone) layout first; the desktop layout is in the media query at the end. */
@@ -136,10 +140,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 label.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--muted); min-width: 0; }
 input, textarea, select {
-  font: 16px var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  font: 16px var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--field-line);
   border-radius: 10px; padding: 9px 11px; width: 100%; min-width: 0;
 }
 textarea { resize: vertical; min-height: 72px; }
+::placeholder { color: var(--muted); opacity: 0.8; }
+/* Number boxes are typed into; the tiny spinner arrows only get in the way. */
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); flex: none; margin: 0; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
@@ -337,7 +345,7 @@ details[open] > summary::before { transform: rotate(45deg); }
 }
 
 /* ---------- Charts ---------- */
-.chart { position: relative; width: 100%; min-width: 0; }
+.chart { position: relative; width: 100%; min-width: 0; margin: 0; }
 .chart svg { display: block; overflow: visible; }
 .chart-axis { stroke: var(--line); stroke-width: 1; }
 .chart-ref { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; }
@@ -352,14 +360,14 @@ details[open] > summary::before { transform: rotate(45deg); }
 .chart-hit:hover .chart-bar { opacity: 1; filter: brightness(1.15); }
 .chart-tip { position: absolute; top: 0; width: 140px; background: var(--ink); color: var(--bg); font-size: 12px; padding: 4px 8px; border-radius: 6px; pointer-events: none; z-index: 2; text-align: center; }
 .pct-bars { display: flex; flex-direction: column; gap: 8px; }
-.pct-row { display: grid; grid-template-columns: minmax(90px, 30%) 1fr auto; gap: 10px; align-items: center; }
+.pct-row { display: grid; grid-template-columns: minmax(84px, 28%) minmax(0, 1fr) 16ch; gap: 10px; align-items: center; } /* fixed value column: every track lines up */
 .pct-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pct-track { position: relative; height: 10px; border-radius: 999px; background: var(--line); }
 .pct-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--good); }
 .pct-fill.mid { background: var(--warn); }
 .pct-fill.short { background: var(--over); }
 .pct-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: 0.5; }
-.pct-val { min-width: 92px; text-align: right; }
+.pct-val { text-align: right; white-space: nowrap; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .stat-tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .stat-tile b { font: 600 22px var(--f-num); }
@@ -380,7 +388,7 @@ details[open] > summary::before { transform: rotate(45deg); }
 .micro-name { color: var(--muted); }
 
 /* ---------- Plan board ---------- */
-.plan-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; align-items: start; }
+.plan-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; align-items: stretch; } /* equal heights per row: no holes */
 .plan-day.is-today { border-color: var(--accent); }
 .plan-day.empty { border-style: dashed; }
 .plan-day-title { font-size: 17px; color: var(--ink); text-transform: none; letter-spacing: 0; }
@@ -486,3 +494,34 @@ input[aria-invalid="true"] { border-color: var(--over); }
 .fab:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 50%, transparent); outline-offset: 3px; }
 .has-fab { padding-bottom: 72px; }
 @media (min-width: 760px) { .fab { right: 32px; bottom: 32px; } }
+
+/* ---------- Phone: fingers need 40 px targets ---------- */
+@media (max-width: 759px) {
+  /* One column on a phone: what you ate comes right after the totals, before plan and meds. */
+  .log-cols > .col { display: contents; }
+  .log-cols > .col > [aria-label="Food logged"] { order: 1; }
+  .log-cols > .col > [aria-label="Planned meals"], .log-cols > .col > [aria-label="Medicines"] { order: 2; }
+  .log-cols > .col > [aria-label="Training"] { order: 3; }
+  button.icon.sm { width: 40px; height: 40px; min-height: 40px; }
+  .chip { min-height: 40px; }
+  .segment button { min-height: 40px; }
+  /* Plan toolbar: the range switch on its own line, the two buttons sharing the next. */
+  .plan-tools { width: 100%; }
+  .plan-tools > .segment { flex: 1 1 100%; }
+  .plan-tools > button { flex: 1; }
+  /* Toasts sit above the floating Add button instead of covering it. */
+  body:has(.screen.has-fab:not(.hidden)) .toasts { bottom: calc(144px + env(safe-area-inset-bottom)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  .fab:hover, .fab:active { transform: none; }
+}
+
+/* Training on a wide window: the week's summary beside the log, not one long stretched list. */
+@media (min-width: 1000px) {
+  #screen-training > .screen { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; align-items: start; }
+}
+@media (min-width: 760px) and (max-width: 999px) {
+  #screen-training > .screen { max-width: 720px; }
+}

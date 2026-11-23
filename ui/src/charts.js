@@ -20,9 +20,13 @@ function barPath(x, y, w, hgt) {
  * tone: '' (series colour), 'over' (above the line), 'muted' (no data).
  */
 export function barChart(opts) {
-  const box = h('div', { class: 'chart', role: 'img', 'aria-label': opts.title || 'Chart' });
-  const tip = h('div', { class: 'chart-tip hidden', role: 'status' });
-  box.append(tip);
+  const box = h('figure', { class: 'chart', 'aria-label': opts.title || 'Chart' });
+  const tip = h('div', { class: 'chart-tip hidden', 'aria-hidden': 'true' });
+  // The same numbers as text, for screen readers (the bars themselves are only a picture).
+  const table = h('table', { class: 'sr-only' },
+    h('caption', { text: opts.title || 'Chart' }),
+    h('tbody', {}, opts.data.map((d) => h('tr', {}, h('td', { text: d.tip || `${d.label}: ${d.v}` })))));
+  box.append(tip, table);
   const draw = () => {
     const W = Math.max(120, box.clientWidth || 600);
     const H = opts.height || 150;
@@ -35,7 +39,9 @@ export function barChart(opts) {
     const bw = Math.max(2, step - 2);
     const y = (v) => pad.t + ih - (v / max) * ih;
     box.querySelector('svg')?.remove();
-    const svg = s('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}` });
+    const svg = s('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, 'aria-hidden': 'true' });
+    // Date labels need about 44 px each; fewer of them on a narrow screen.
+    const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(iw / 44))));
     svg.append(s('line', { x1: pad.l, x2: W - pad.r, y1: pad.t + ih, y2: pad.t + ih, class: 'chart-axis' }));
     opts.data.forEach((d, i) => {
       const x = pad.l + i * step + (step - bw) / 2;
@@ -52,8 +58,9 @@ export function barChart(opts) {
       });
       g.addEventListener('mouseleave', () => tip.classList.add('hidden'));
       svg.append(g);
-      // A date label roughly every 7 bars, plus the last one.
-      if (d.label && (i % Math.ceil(n / 8) === 0 || i === n - 1)) {
+      // Evenly spaced date labels, plus the last one (dropping the one before it if they'd touch).
+      const isLast = i === n - 1;
+      if (d.label && (isLast || (i % every === 0 && n - 1 - i >= every))) {
         svg.append(Object.assign(s('text', { x: x + bw / 2, y: H - 5, 'text-anchor': 'middle', class: 'chart-label' }), { textContent: d.label }));
       }
     });

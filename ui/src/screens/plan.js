@@ -35,7 +35,7 @@ async function refresh() {
         h('div', { class: 'small muted', 'data-testid': 'plan-summary', text: p.plannedDays
           ? `${p.plannedDays} planned${unplanned ? `, ${unplanned} still open` : ''} · avg ${n0(p.avgKcal)} kcal · ${n1(p.avgProt)} g protein`
           : 'Nothing planned yet. Add meals to a day below.' })),
-      h('div', { class: 'row wrap' },
+      h('div', { class: 'row wrap plan-tools' },
         seg,
         h('button', {
           type: 'button',
@@ -71,7 +71,7 @@ function dayCard(d, p) {
     'article',
     { class: `card plan-day ${d.isToday ? 'is-today' : ''} ${d.meals.length ? '' : 'empty'}`, 'data-plan-day': d.date, 'aria-label': title(d) },
     h('div', { class: 'row spread' },
-      h('div', {}, h('h3', { class: 'plan-day-title', text: title(d) }), d.offset > 1 ? null : h('div', { class: 'small muted', text: dayLabel(d.date, '') })),
+      h('div', {}, h('h2', { class: 'plan-day-title', text: title(d) }), d.offset > 1 ? null : h('div', { class: 'small muted', text: dayLabel(d.date, '') })),
       d.meals.length ? h('span', { class: `num small ${d.over ? 'error' : ''}`, text: `${n0(d.kcal)} kcal` }) : h('span', { class: 'badge warn', text: 'Open' })),
     d.meals.length
       ? h('div', { class: 'stack' },
@@ -88,7 +88,7 @@ function dayCard(d, p) {
           iconButton('plus', `Add ${slot.toLowerCase()} on ${title(d)}`, () => editMeal(d, slot))),
         meals.map((m) => h('button', { type: 'button', class: 'plan-meal ghost row-edit', 'aria-label': `Edit ${m.name}`, onclick: () => editMeal(d, slot, m) },
           h('span', { class: 'name' }, h('span', { text: m.name }), m.done ? h('span', { class: 'badge good', text: 'eaten' }) : null),
-          h('span', { class: 'num small muted', text: `${n0(m.kcal)} · ${n1(m.prot)} g` }),
+          h('span', { class: 'num small muted', text: `${n0(m.kcal)} kcal · ${n1(m.prot)} g` }),
           h('span', { class: 'edit-hint', 'aria-hidden': 'true', text: 'Edit' }))));
     })),
   );

@@ -54,6 +54,8 @@ pub struct MealGroup {
     pub meal: String,
     pub kcal: f64,
     pub prot: f64,
+    /// Sum of the rows that know their fiber; None when none of them do (unknown, not 0).
+    pub fiber: Option<f64>,
     pub rows: Vec<LogRow>,
 }
 
@@ -800,8 +802,11 @@ impl Core {
         let s = self.store.settings();
         let plan_ids = self.plan_log_ids(date);
         // Every meal is always there, empty or not, so the Log keeps the same shape all day.
-        let mut groups: BTreeMap<usize, MealGroup> =
-            MEALS.iter().enumerate().map(|(i, m)| (i, MealGroup { meal: (*m).into(), kcal: 0.0, prot: 0.0, rows: vec![] })).collect();
+        let mut groups: BTreeMap<usize, MealGroup> = MEALS
+            .iter()
+            .enumerate()
+            .map(|(i, m)| (i, MealGroup { meal: (*m).into(), kcal: 0.0, prot: 0.0, fiber: None, rows: vec![] }))
+            .collect();
         let mut logs: Vec<(&String, &Log)> = self.store.all::<Log>().filter(|(_, l)| l.date == date).collect();
         logs.sort_by_key(|(_, l)| l.ts);
         for (id, l) in logs {
@@ -809,6 +814,9 @@ impl Core {
             let g = groups.get_mut(&idx).expect("every meal has a group");
             g.kcal += l.kcal;
             g.prot += l.prot;
+            if let Some(f) = l.fiber {
+                g.fiber = Some(g.fiber.unwrap_or(0.0) + f);
+            }
             g.rows.push(LogRow {
                 id: id.clone(),
                 name: l.name.clone(),
@@ -826,6 +834,7 @@ impl Core {
             .map(|mut g| {
                 g.kcal = g.kcal.round();
                 g.prot = round1(g.prot);
+                g.fiber = g.fiber.map(round1);
                 g
             })
             .collect();

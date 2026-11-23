@@ -911,3 +911,91 @@ test('Keyboard focus survives redraws and stays inside open sheets', async ({ pa
   await page.keyboard.press('Escape');
   expect(await page.evaluate(() => document.activeElement.textContent)).toContain('Add training');
 });
+
+// ---------- Polish from the UI review ----------
+
+test('Light mode: text colours read at 4.5:1 on cards and the page', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await open(page, 'seed=demo&layout=new');
+  const ratios = await page.evaluate(() => {
+    const css = getComputedStyle(document.documentElement);
+    const rgb = (v) => { const c = document.createElement('canvas').getContext('2d'); c.fillStyle = v; const h = c.fillStyle.slice(1); return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255); };
+    const lum = (v) => { const [r, g, b] = rgb(v).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const cr = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+    const t = (n) => css.getPropertyValue(n).trim();
+    const out = {};
+    for (const n of ['--muted', '--accent', '--energy', '--fiber', '--protein', '--over', '--warn', '--good']) out[n] = Math.min(cr(t(n), t('--surface')), cr(t(n), t('--bg')));
+    return out;
+  });
+  for (const [n, r] of Object.entries(ratios)) expect(r, n).toBeGreaterThanOrEqual(4.5);
+});
+
+test('Phone Log: Food right after the totals; toasts clear the Add button; 40 px targets', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await open(page, 'seed=demo&layout=new&hhmm=12:00');
+  const y = async (sel) => (await page.locator(sel).boundingBox()).y;
+  expect(await y('[aria-label="Food logged"]')).toBeLessThan(await y('[aria-label="Planned meals"]'));
+  expect(await y('[aria-label="Energy and protein"]')).toBeLessThan(await y('[aria-label="Food logged"]'));
+  await page.getByLabel('Ate Tofu bowl').check();
+  await page.evaluate(() => { const t = document.createElement('div'); t.className = 'toast'; t.textContent = 'A message long enough to span the whole width of a phone screen'; document.getElementById('toasts').append(t); });
+  const toast = await page.locator('.toast').last().boundingBox();
+  const fab = await page.locator('#open-add').boundingBox();
+  expect(toast.y + toast.height).toBeLessThanOrEqual(fab.y);
+  for (const b of await page.locator('#screen-today button.icon.sm:visible, #screen-today .chip:visible').all()) {
+    expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(40);
+  }
+});
+
+test('Training: chart date labels never touch, and the log sits beside the summary on desktop', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await open(page, 'seed=rich&layout=new');
+  await tab(page, 'training').click();
+  await expect(page.locator('#screen-training .chart-label').first()).toBeVisible();
+  const boxes = await page.locator('#screen-training .chart-label').evaluateAll((els) => els.map((e) => e.getBBox()).map((b) => [b.x, b.x + b.width]));
+  for (let i = 1; i < boxes.length; i++) expect(boxes[i][0], `label ${i}`).toBeGreaterThan(boxes[i - 1][1] + 2);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const summary = await page.locator('.card[aria-label="Last four weeks"]').boundingBox();
+  const log = await page.locator('.card[aria-label="Training log"]').boundingBox();
+  expect(log.x).toBeGreaterThan(summary.x + summary.width - 1);
+  expect(log.width).toBeLessThan(900);
+});
+
+test('Plan: meals say kcal, day cards in a row are the same height', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=rich&layout=new&hhmm=13:10');
+  await tab(page, 'plan').click();
+  await expect(page.locator('.plan-meal').first()).toContainText('kcal');
+  const cards = await page.locator('.plan-day').evaluateAll((els) => els.map((e) => [Math.round(e.getBoundingClientRect().top), Math.round(e.getBoundingClientRect().height)]));
+  const rows = {};
+  for (const [top, hgt] of cards) (rows[top] ||= new Set()).add(hgt);
+  for (const set of Object.values(rows)) expect(set.size).toBe(1);
+});
+
+test('History: nutrient bars line up across groups; day rows read their numbers', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=rich&layout=new');
+  await tab(page, 'history').click();
+  const tracks = await page.locator('.nut-groups .pct-track').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width)]; }));
+  expect(tracks.length).toBeGreaterThan(3);
+  expect(new Set(tracks.map(([l]) => l)).size).toBe(1);
+  expect(new Set(tracks.map(([, w]) => w)).size).toBe(1);
+  await expect(page.locator('.day-row').first()).toHaveAttribute('aria-label', /kcal, .* g protein/);
+});
+
+test('Log meals show a fiber subtotal; the header keeps its height on Settings', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=rich&layout=new&hhmm=20:00');
+  // The fourth cell of a meal's header is its fiber: the sum of its rows' fiber.
+  const sums = await page.locator('.food-group').evaluateAll((gs) => gs.map((g) => {
+    const head = g.querySelector('.food-head').children[3].textContent.trim();
+    const rows = [...g.querySelectorAll('.food-row:not(.food-head)')].map((r) => parseFloat(r.children[3]?.textContent)).filter((x) => !Number.isNaN(x));
+    return [head, rows.length ? Math.round(rows.reduce((a, b) => a + b, 0) * 10) / 10 : null];
+  }));
+  const withFiber = sums.filter(([, sum]) => sum !== null);
+  expect(withFiber.length).toBeGreaterThan(0);
+  for (const [head, sum] of withFiber) expect(Number(head)).toBeCloseTo(sum, 0);
+  const h1 = (await page.locator('header').first().boundingBox()).height;
+  await page.locator('#open-settings').click();
+  const h2 = (await page.locator('header').first().boundingBox()).height;
+  expect(h2).toBe(h1);
+});
