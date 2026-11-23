@@ -347,6 +347,7 @@ details[open] > summary::before { transform: rotate(45deg); }
 .chart-bar.over { fill: var(--over); }
 .chart-bar.prot { fill: var(--protein); }
 .chart-bar.fiber { fill: var(--fiber); }
+.chart-bar.sleep { fill: var(--accent); }
 .chart-bar.short { opacity: 0.45; }
 .chart-bar.train { fill: var(--accent); }
 .chart-bar.muted { fill: var(--line); }
@@ -361,9 +362,9 @@ details[open] > summary::before { transform: rotate(45deg); }
 .pct-fill.short { background: var(--over); }
 .pct-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: 0.5; }
 .pct-val { text-align: right; white-space: nowrap; }
-.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
 .stat-tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.stat-tile b { font: 600 22px var(--f-num); }
+.stat-tile b { font: 600 22px var(--f-num); white-space: nowrap; }
 .stat-tile b.small-b { font: 600 15px var(--f-body); }
 .stat-tile.warn { border-color: var(--warn); }
 .stat-tile.good b { color: var(--good); }
@@ -493,7 +494,7 @@ input[aria-invalid="true"] { border-color: var(--over); }
   /* One column on a phone: what you ate comes right after the totals, before plan and meds. */
   .log-cols > .col { display: contents; }
   .log-cols > .col > [aria-label="Food logged"] { order: 1; }
-  .log-cols > .col > [aria-label="Planned meals"], .log-cols > .col > [aria-label="Medicines"] { order: 2; }
+  .log-cols > .col > [aria-label="Sleep"], .log-cols > .col > [aria-label="Planned meals"], .log-cols > .col > [aria-label="Medicines"] { order: 2; }
   .log-cols > .col > [aria-label="Training"] { order: 3; }
   button.icon.sm { width: 40px; height: 40px; min-height: 40px; }
   .chip { min-height: 40px; }
@@ -526,3 +527,8 @@ input[aria-invalid="true"] { border-color: var(--over); }
 .day-chevron { width: 7px; height: 7px; flex: none; margin: 0 4px 0 2px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform 0.15s; }
 .day-row[aria-expanded="true"] .day-chevron { transform: rotate(45deg); }
 .day-nutrients { padding: 4px 0 14px 18px; }
+
+/* Sleep card: the two times side by side, the length in the header. */
+.sleep-card .card-head { margin-bottom: 4px; }
+.sleep-card input[type="time"] { font-family: var(--f-num); }
+.day-sleep { margin: 0 0 10px; }

@@ -27,7 +27,8 @@ function mount(root, o = {}) {
   els.food = h('div', { class: 'card', 'aria-label': 'Food logged' });
   els.meds = h('div', { class: 'card hidden', 'aria-label': 'Medicines' });
   els.training = h('div', { class: 'card', 'aria-label': 'Training' });
-  root.append(h('div', { class: 'cols log-cols' }, h('div', { class: 'col' }, els.strip, els.nav, els.energy, els.plan, els.meds), h('div', { class: 'col' }, els.food, els.training)));
+  els.sleep = sleepCard();
+  root.append(h('div', { class: 'cols log-cols' }, h('div', { class: 'col' }, els.strip, els.nav, els.energy, els.sleep, els.plan, els.meds), h('div', { class: 'col' }, els.food, els.training)));
   if (opts.addPanel) {
     // Adding food happens in an overlay, so the Log stays a clean record of the day.
     els.addOverlay = overlay('Add food');
@@ -317,6 +318,64 @@ function render() {
         )
       : h('p', { class: 'muted', text: 'No training logged.' }),
   );
+  els.sleep.show(d);
+}
+
+/** "7 h 30 min" from minutes. */
+export function fmtMins(m) {
+  const t = Math.round(m), hh = Math.floor(t / 60), mm = t % 60;
+  return hh ? `${hh} h${mm ? ` ${mm} min` : ''}` : `${mm} min`;
+}
+
+/**
+ * Last night's sleep: when you went to bed and when you woke up, saved as soon as both
+ * are filled in. Built once; redraws only refill the boxes when you're not typing in them.
+ */
+function sleepCard() {
+  let shownDate = null;
+  let date = null;
+  const bed = h('input', { type: 'time', id: 'sleep-bed', 'aria-label': 'Went to bed' });
+  const wake = h('input', { type: 'time', id: 'sleep-wake', 'aria-label': 'Woke up' });
+  const info = h('span', { class: 'small muted', 'data-testid': 'sleep-length' });
+  const err = h('div', { class: 'error', role: 'alert' });
+  const clear = iconButton('close', 'Clear sleep', async () => {
+    await call('clear_sleep', { date });
+    bed.value = '';
+    wake.value = '';
+    changed();
+  });
+  const save = async () => {
+    err.textContent = '';
+    if (!bed.value || !wake.value) return;
+    try {
+      await quiet('set_sleep', { date, bed: bed.value, wake: wake.value });
+    } catch (e) {
+      err.textContent = message(e);
+      return;
+    }
+    changed();
+  };
+  bed.addEventListener('change', save);
+  wake.addEventListener('change', save);
+  const card = h('div', { class: 'card sleep-card', 'aria-label': 'Sleep' },
+    h('div', { class: 'card-head' }, h('h2', { text: 'Sleep' }), h('div', { class: 'row' }, info, clear)),
+    h('div', { class: 'grid2' }, h('label', { class: 'field' }, 'Went to bed', bed), h('label', { class: 'field' }, 'Woke up', wake)),
+    err);
+  card.show = (d) => {
+    date = d.date;
+    const s = d.sleep;
+    // A new day, or a box you're not in: show what's saved. Never overwrite while typing.
+    const typing = card.contains(document.activeElement) && shownDate === d.date;
+    if (!typing) {
+      bed.value = s ? s.bed : '';
+      wake.value = s ? s.wake : '';
+      if (shownDate !== d.date) err.textContent = '';
+    }
+    shownDate = d.date;
+    info.textContent = s ? `${fmtMins(s.mins)} asleep` : d.isToday ? 'How did you sleep last night?' : 'Not logged';
+    clear.classList.toggle('hidden', !s);
+  };
+  return card;
 }
 
 /** Add a session, or edit `w` ({ id, kind, mins, kcal, name }) with Save and Delete. */

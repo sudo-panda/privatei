@@ -441,3 +441,17 @@ mod tests {
         assert!(!valid_model_name(&"a".repeat(41)));
     }
 }
+
+/// One night's sleep, stored under the date you woke up (id = YYYY-MM-DD).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Sleep {
+    /// "HH:MM" you went to bed.
+    #[serde(deserialize_with = "lenient::string")]
+    pub bed: String,
+    /// "HH:MM" you woke up.
+    #[serde(deserialize_with = "lenient::string")]
+    pub wake: String,
+    #[serde(deserialize_with = "lenient::i64")]
+    pub ts: i64,
+}

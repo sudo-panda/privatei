@@ -334,7 +334,7 @@ test('Failed saves show a short message', async ({ page }) => {
   await open(page);
   await tab(page, 'shop').click();
   await page.getByRole('button', { name: 'Add to list' }).click();
-  await expect(page.locator('.card .error').first()).toHaveText('Name the item.');
+  await expect(page.locator('#screen-shop .card .error').first()).toHaveText('Name the item.');
   await page.evaluate(() => (window.__mock.aiAvailable = false));
   await page.locator('#open-settings').click();
   await page.getByRole('button', { name: 'Test the AI' }).click();
@@ -464,7 +464,7 @@ test('New layout: plan board, edit sheets, charts and insights', async ({ page }
   // History: insights and charts
   await tab(page, 'history').click();
   await expect(page.locator('.insights .insight').first()).toContainText('Needs attention');
-  await expect(page.locator('#screen-history .chart svg')).toHaveCount(4);
+  await expect(page.locator('#screen-history .chart svg')).toHaveCount(5); // calories, protein, fiber, training, sleep
   await expect(page.locator('.card[aria-label="Nutrients"] .pct-row').first()).toBeVisible();
 });
 
@@ -1058,4 +1058,47 @@ test('History "Day by day": a day opens its nutrients in place, not the Log', as
   const typed = page.locator('.day-row', { hasText: /kcal/ }).last();
   await typed.click();
   await expect(page.locator('.day-nutrients:not(.hidden)')).toBeVisible();
+});
+
+test('Sleep on the Log: bed and wake times save, show the length, and can be cleared', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&hhmm=09:00');
+  const card = page.locator('.card[aria-label="Sleep"]');
+  await expect(card).toContainText('How did you sleep last night?');
+  await page.locator('#sleep-bed').fill('23:30');
+  await page.locator('#sleep-bed').blur();
+  expect(await page.evaluate(() => window.__mock.sleep['2026-11-22'])).toBeUndefined(); // waits for both
+  await page.locator('#sleep-wake').fill('07:00');
+  await page.locator('#sleep-wake').blur();
+  await expect(page.getByTestId('sleep-length')).toHaveText('7 h 30 min asleep');
+  expect(await page.evaluate(() => window.__mock.sleep['2026-11-22'])).toMatchObject({ bed: '23:30', wake: '07:00' });
+  // Another day shows its own night; coming back shows this one again.
+  await page.getByLabel('Previous day').click();
+  await expect(page.locator('#sleep-bed')).toHaveValue('');
+  await expect(page.getByTestId('sleep-length')).toHaveText('Not logged');
+  await page.locator('.strip-day.is-today').click();
+  await expect(page.locator('#sleep-bed')).toHaveValue('23:30');
+  // The same time twice is refused with a message.
+  await page.locator('#sleep-wake').fill('23:30');
+  await page.locator('#sleep-wake').blur();
+  await expect(card.locator('.error')).toContainText("can't be the same");
+  await card.getByRole('button', { name: 'Clear sleep' }).click();
+  await expect(page.getByTestId('sleep-length')).toHaveText('How did you sleep last night?');
+  expect(await page.evaluate(() => window.__mock.sleep['2026-11-22'])).toBeUndefined();
+});
+
+test('Sleep in History: average tile, nightly chart, and on each day', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=rich&layout=new');
+  await tab(page, 'history').click();
+  const tile = page.locator('.stat-tile', { hasText: 'Avg sleep' });
+  await expect(tile).toContainText(/\d(\.\d)? h/);
+  await expect(tile).toContainText(/bed \d\d:\d\d · up \d\d:\d\d/);
+  await expect(page.locator('.card[aria-label="Sleep"] .chart svg')).toBeVisible();
+  await expect(page.locator('.insights')).toContainText(/Sleeping \d h/);
+  await page.locator('details > summary', { hasText: 'Day by day' }).click();
+  const row = page.locator('.day-row').nth(1);
+  await expect(row).toContainText(/slept \d h/);
+  await row.click();
+  await expect(page.locator('.day-nutrients:not(.hidden) .day-sleep')).toContainText(/in bed \d\d:\d\d, up \d\d:\d\d/);
 });

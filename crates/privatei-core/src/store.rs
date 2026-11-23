@@ -10,10 +10,11 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
 
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 /// Synced tables, in export order. `local` is never synced or exported.
-pub const TABLES: [&str; 11] = ["log", "plan", "stock", "list", "meds", "medlog", "workouts", "foods", "recipes", "rules", "settings"];
+pub const TABLES: [&str; 12] =
+    ["log", "plan", "stock", "list", "meds", "medlog", "workouts", "sleep", "foods", "recipes", "rules", "settings"];
 
 #[derive(Debug, Clone)]
 pub struct Rec<T> {
@@ -55,6 +56,7 @@ pub struct Store {
     pub meds: Table<Med>,
     pub medlog: Table<MedLog>,
     pub workouts: Table<Workout>,
+    pub sleep: Table<Sleep>,
     pub foods: Table<Food>,
     pub rules: Table<Rules>,
     pub settings: Table<Settings>,
@@ -82,6 +84,7 @@ doc!(ListItem, "list", list);
 doc!(Med, "meds", meds);
 doc!(MedLog, "medlog", medlog);
 doc!(Workout, "workouts", workouts);
+doc!(Sleep, "sleep", sleep);
 doc!(Food, "foods", foods);
 doc!(Rules, "rules", rules);
 doc!(Settings, "settings", settings);
@@ -121,6 +124,7 @@ impl Store {
             meds: Table::new(),
             medlog: Table::new(),
             workouts: Table::new(),
+            sleep: Table::new(),
             foods: Table::new(),
             rules: Table::new(),
             settings: Table::new(),
@@ -134,6 +138,7 @@ impl Store {
         s.load::<Med>()?;
         s.load::<MedLog>()?;
         s.load::<Workout>()?;
+        s.load::<Sleep>()?;
         s.load::<Food>()?;
         s.load::<Rules>()?;
         s.load::<Settings>()?;
@@ -258,6 +263,7 @@ impl Store {
         self.load::<Med>()?;
         self.load::<MedLog>()?;
         self.load::<Workout>()?;
+        self.load::<Sleep>()?;
         self.load::<Food>()?;
         self.load::<Rules>()?;
         self.load::<Settings>()?;
@@ -289,6 +295,7 @@ impl Store {
         add::<Med>(self, ts, &mut out);
         add::<MedLog>(self, ts, &mut out);
         add::<Workout>(self, ts, &mut out);
+        add::<Sleep>(self, ts, &mut out);
         add::<Food>(self, ts, &mut out);
         add::<Rules>(self, ts, &mut out);
         add::<Settings>(self, ts, &mut out);
@@ -331,13 +338,17 @@ fn migrate(conn: &Connection) -> Result<()> {
         for t in TABLES.iter().chain(std::iter::once(&"local")) {
             sql.push_str(&create_table(t));
         }
-        sql.push_str("PRAGMA user_version = 2; COMMIT;");
+        sql.push_str(&format!("PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"));
         conn.execute_batch(&sql).map_err(err)?;
         return Ok(());
     }
     if version < 2 {
         // v2: recipes
         conn.execute_batch(&format!("BEGIN; {} PRAGMA user_version = 2; COMMIT;", create_table("recipes"))).map_err(err)?;
+    }
+    if version < 3 {
+        // v3: sleep
+        conn.execute_batch(&format!("BEGIN; {} PRAGMA user_version = 3; COMMIT;", create_table("sleep"))).map_err(err)?;
     }
     if version > SCHEMA_VERSION {
         return Err(format!("This database was made by a newer Private-I (schema {version})."));
@@ -454,7 +465,8 @@ mod tests {
         assert_eq!(s.get::<Log>("a").unwrap().name, "Egg", "old data kept");
         s.put("r", Recipe { name: "Dal".into(), servings: 4.0, ..Default::default() }).unwrap();
         let v: i64 = s.conn().query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 2);
+        assert_eq!(v, SCHEMA_VERSION);
+        s.put("2026-11-22", Sleep { bed: "23:00".into(), wake: "07:00".into(), ts: 1 }).unwrap();
         drop(s);
         assert_eq!(Store::open(&path, "d").unwrap().get::<Recipe>("r").unwrap().name, "Dal");
         // A database from a newer app is refused rather than damaged.

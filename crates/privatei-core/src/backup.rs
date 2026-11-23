@@ -37,6 +37,7 @@ pub fn export(store: &Store, now_ms: i64) -> Value {
     c.insert("meds".into(), collection::<Med>(store));
     c.insert("medlog".into(), collection::<MedLog>(store));
     c.insert("workouts".into(), collection::<Workout>(store));
+    c.insert("sleep".into(), collection::<Sleep>(store));
     c.insert("foods".into(), collection::<Food>(store));
     c.insert("recipes".into(), collection::<Recipe>(store));
     c.insert("rules".into(), collection::<Rules>(store));
@@ -91,6 +92,7 @@ pub fn import(store: &mut Store, text: &str) -> Result<usize, String> {
                 "meds" => import_coll::<Med>(s, docs, None)?,
                 "medlog" => import_coll::<MedLog>(s, docs, None)?,
                 "workouts" => import_coll::<Workout>(s, docs, None)?,
+                "sleep" => import_coll::<Sleep>(s, docs, None)?,
                 "foods" => import_coll::<Food>(s, docs, None)?,
                 "recipes" => import_coll::<Recipe>(s, docs, None)?,
                 "rules" => import_coll::<Rules>(s, docs, Some("house"))?,

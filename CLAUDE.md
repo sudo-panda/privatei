@@ -4,7 +4,7 @@ The app's name is **Private-I**. Code, crates, the repo and the bundle id keep t
 lowercase `privatei` (`app.privatei.desktop`, `privatei-core`, `privatei-export`) —
 changing the bundle id would move the user's data folder and break updates.
 
-Personal food, food-stock, medicine and training tracker. Mac app today (Apple Silicon),
+Personal food, food-stock, medicine, training and sleep tracker. Mac app today (Apple Silicon),
 Android (maybe iPhone) later.
 
 ## Architecture

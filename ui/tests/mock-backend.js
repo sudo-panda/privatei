@@ -56,7 +56,7 @@ const cmpDate = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 const db = {
   log: {}, plan: {}, stock: {}, list: {}, meds: {}, medlog: {}, workouts: {}, foods: {},
-  recipes: {},
+  recipes: {}, sleep: {},
   rules: '', settings: { addBurn: false, weightKg: 82, kcalTarget: 1500, protFloor: 90, fiberFloor: 30 },
   ai: { order: ['claude', 'gemini'], geminiKey: '', geminiModel: 'gemini-flash-latest', claudeModel: '', claudePath: '' },
   aiAvailable: true,
@@ -133,6 +133,8 @@ function seedRich() {
     for (const [mid, m] of Object.entries(db.meds)) if (isDue(m, d) && (i * 5 + mid.length) % 7 !== 0) db.medlog[`${d}_${mid}`] = { date: d, medId: mid, at: m.time, ts: db.ts++ };
   }
   db.medlog[`${TODAY}_m1`] = { date: TODAY, medId: 'm1', at: '08:04', ts: db.ts++ };
+  // Sleep: two weeks of nights, a couple of late ones.
+  for (let i = 1; i <= 14; i++) db.sleep[addDays(TODAY, -i)] = { bed: ['23:15', '22:45', '00:30', '23:40', '23:05', '01:10', '22:50'][i % 7], wake: ['06:50', '06:30', '07:15', '07:00', '06:45', '08:20', '06:40'][i % 7], ts: db.ts++ };
   // Kitchen
   const st = [
     ['Cooked rice', 450, 'g', 'cooked', -3, 1], ['Dal', 600, 'g', 'cooked', -1, 3], ['Roasted peppers', 300, 'g', 'cooked', -4, 0],
@@ -263,8 +265,16 @@ function getDay({ date }) {
     meals: MEALS.map((m) => groups[m] || { meal: m, kcal: 0, prot: 0, rows: [] }).map((g) => { const known = g.rows.filter((r) => r.fiber != null); return { ...g, kcal: Math.round(g.kcal), prot: r1(g.prot), fiber: known.length ? r1(known.reduce((a, r) => a + r.fiber, 0)) : null }; }),
     meds, workouts: ws.map(([wid, w]) => ({ id: wid, kind: w.kind, mins: w.mins, kcal: w.kcal, name: w.name })),
     canCopyYesterday: own === 0 && live('log').some(([lid, l]) => l.date === y && !yIds.has(lid)),
+    sleep: sleepView(db.sleep[date]),
   };
 }
+
+// Sleep, as in the core's sleep.rs.
+const hm = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t).trim()); return m && +m[1] < 24 && +m[2] < 60 ? +m[1] * 60 + +m[2] : null; };
+const fmtHm = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const sleepMins = (bed, wake) => { const b = hm(bed), w = hm(wake); if (b == null || w == null) return null; const d = w > b ? w - b : w + 1440 - b; return d > 0 && d <= 1200 ? d : null; };
+function sleepView(s) { const mins = s && sleepMins(s.bed, s.wake); return mins ? { bed: s.bed, wake: s.wake, mins } : null; }
+const avgClock = (ts, pivot) => (ts.length ? fmtHm(Math.round(ts.map((t) => (t < pivot ? t + 1440 : t)).reduce((a, b) => a + b, 0) / ts.length) % 1440) : null);
 
 function place(part) {
   const t = part.toLowerCase();
@@ -422,7 +432,7 @@ function history({ range = 60 } = {}) {
   }
   for (const [, w] of live('workouts')) { mins[w.date] = (mins[w.date] || 0) + w.mins; burns[w.date] = (burns[w.date] || 0) + w.kcal; }
   for (const k of Object.keys(db.medlog)) ticks.add(k);
-  const used = (d) => !!food[d] || !!mins[d] || [...ticks].some((t) => t.startsWith(d));
+  const used = (d) => !!food[d] || !!mins[d] || [...ticks].some((t) => t.startsWith(d)) || !!sleepView(db.sleep[d]);
   let first = addDays(TODAY, 1 - range);
   while (first <= TODAY && !used(first)) first = addDays(first, 1);
   const days = [], medHist = {};
@@ -437,7 +447,7 @@ function history({ range = 60 } = {}) {
     }
     const target = st.kcalTarget + (st.addBurn ? burns[d] || 0 : 0);
     days.push({ date: d, kcal: Math.round(f.kcal), prot: r1(f.prot), fiber: f.fk ? r1(f.fiber) : null, nut: Object.keys(f.m).length ? f.m : null, mins: mins[d] || 0, taken, due: due.length, used: used(d),
-      protMet: f.prot >= st.protFloor && f.prot > 0, fiberMet: f.fk && f.fiber >= st.fiberFloor, over: f.kcal > target, target: Math.round(target) });
+      protMet: f.prot >= st.protFloor && f.prot > 0, fiberMet: f.fk && f.fiber >= st.fiberFloor, over: f.kcal > target, target: Math.round(target), sleep: sleepView(db.sleep[d]) });
   }
   const u = days.filter((d) => d.used);
   const fd = days.filter((d) => d.kcal > 0);
@@ -453,6 +463,11 @@ function history({ range = 60 } = {}) {
     adherence: due ? Math.round((taken * 100) / due) : null, daysTrained: days.filter((d) => d.mins > 0).length, daysUsed: u.length,
     nutrients: nutViews(navg, nk, fd.length, st.fiberFloor),
   };
+  const slept = days.map((d) => d.sleep).filter(Boolean);
+  Object.assign(summary, {
+    avgSleepMins: slept.length ? Math.round(avg(slept.map((x) => x.mins))) : null,
+    avgBed: avgClock(slept.map((x) => hm(x.bed)), 720), avgWake: avgClock(slept.map((x) => hm(x.wake)), 1080), sleepNights: slept.length,
+  });
   const meds = Object.values(medHist).map((m) => ({ ...m, missed: m.due - m.taken }));
   const ins = [];
   const short = fd.filter((d) => d.prot < st.protFloor).length;
@@ -463,6 +478,10 @@ function history({ range = 60 } = {}) {
     if (m.kind === 'limit' && m.pct > 100) ins.push({ level: 'warn', title: `${m.label} above your limit`, detail: `About ${m.amount} ${m.unit} a day against a limit of ${m.reference} ${m.unit}.` });
   }
   for (const m of meds.filter((m) => m.missed)) ins.push({ level: m.missed * 5 > m.due ? 'warn' : 'info', title: `${m.name} missed ${m.missed} of ${m.due} times`, detail: 'Counting only days you used the app.' });
+  if (slept.length >= 3) {
+    const a = summary.avgSleepMins, h = `${Math.floor(a / 60)} h${a % 60 ? ` ${a % 60} min` : ''}`, t = ` Usually in bed by ${summary.avgBed}, up at ${summary.avgWake}.`;
+    ins.push(a < 420 ? { level: 'warn', title: `Sleeping ${h} a night on average`, detail: `Most adults need 7–9 hours.${t}` } : { level: 'good', title: `Sleeping ${h} a night`, detail: `Within the 7–9 hours most adults need.${t}` });
+  }
   const over = fd.filter((d) => d.over).length;
   if (over * 3 > fd.length) ins.push({ level: 'warn', title: `Over your calorie target on ${over} of ${fd.length} days`, detail: `Average ${summary.avgKcal} kcal against ${st.kcalTarget} kcal.` });
   if (!short && fd.length) ins.push({ level: 'good', title: 'Protein floor met every day', detail: `Averaging ${summary.avgProt} g.` });
@@ -709,6 +728,14 @@ const handlers = {
   add_plan_meal: ({ date, meal: m }) => { (db.plan[date] ||= { meals: [] }).meals.push({ ...m, done: false, logId: null }); },
   remove_plan_meal: ({ date, idx, name }) => { planMealAt(date, idx, name); const p = db.plan[date]; if (p) { const [m] = p.meals.splice(idx, 1); if (m?.logId) delete db.log[m.logId]; } },
   training_summary: trainingSummary,
+  set_sleep: ({ date, bed, wake }) => {
+    if (date > TODAY) throw "You can't log sleep for a day that hasn't come yet.";
+    const b = hm(bed), w = hm(wake);
+    if (b == null || w == null) throw 'Use times like 23:30 and 07:00.';
+    if (!sleepMins(bed, wake)) throw "Bedtime and wake-up time can't be the same, or more than 20 hours apart.";
+    db.sleep[date] = { bed: fmtHm(b), wake: fmtHm(w), ts: db.ts++ };
+  },
+  clear_sleep: ({ date }) => { delete db.sleep[date]; },
   get_settings: () => ({ ...db.settings }),
   save_settings: ({ settings }) => {
     if (!(settings.weightKg >= 30 && settings.weightKg <= 300)) throw 'Weight must be between 30 and 300 kg.';

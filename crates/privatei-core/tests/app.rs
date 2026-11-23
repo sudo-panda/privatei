@@ -745,3 +745,34 @@ fn meal_fiber_subtotal_counts_known_rows_and_stays_unknown_without_any() {
     assert_eq!(d.meals[1].fiber, Some(8.5));
     assert_eq!(d.meals[0].fiber, None, "an empty meal's fiber is unknown, not 0");
 }
+
+#[test]
+fn sleep_in_the_day_and_in_history() {
+    let mut c = core("2026-11-22", "12:00");
+    c.set_sleep("2026-11-22", "23:30", "7:00").unwrap();
+    let s = c.day("2026-11-22").unwrap().sleep.unwrap();
+    assert_eq!((s.bed.as_str(), s.wake.as_str(), s.mins), ("23:30", "07:00", 450.0));
+    assert!(c.day("2026-11-21").unwrap().sleep.is_none());
+    // Saving again replaces the night; clearing removes it.
+    c.set_sleep("2026-11-22", "00:30", "07:00").unwrap();
+    assert_eq!(c.day("2026-11-22").unwrap().sleep.unwrap().mins, 390.0);
+    assert!(c.set_sleep("2026-11-23", "23:00", "07:00").is_err(), "future");
+    assert!(c.set_sleep("2026-11-21", "25:00", "07:00").is_err());
+    assert!(c.set_sleep("2026-11-21", "07:00", "07:00").is_err());
+    c.set_sleep("2026-11-21", "22:30", "06:30").unwrap();
+    c.set_sleep("2026-11-20", "23:30", "06:00").unwrap();
+    let h = c.history_range(14);
+    assert_eq!(h.summary.sleep_nights, 3);
+    assert_eq!(h.summary.avg_sleep_mins, Some(((390 + 480 + 390) / 3) as f64));
+    assert_eq!(h.summary.avg_bed.as_deref(), Some("23:30"), "bedtimes average across midnight");
+    assert_eq!(h.summary.avg_wake.as_deref(), Some("06:30"));
+    assert_eq!(h.days[0].sleep.as_ref().unwrap().bed, "00:30");
+    assert!(h.insights.iter().any(|i| i.title.starts_with("Sleeping 7 h a night")), "{:?}", h.insights);
+    // Days with only sleep count as used, so History doesn't trim them away.
+    assert_eq!(h.days.last().unwrap().date, "2026-11-20");
+    c.clear_sleep("2026-11-22").unwrap();
+    assert!(c.day("2026-11-22").unwrap().sleep.is_none());
+    // Backups carry sleep.
+    let dump = privatei_core::backup::export(&c.store, 0);
+    assert_eq!(dump["collections"]["sleep"]["2026-11-21"]["bed"], "22:30");
+}

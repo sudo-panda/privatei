@@ -2,6 +2,7 @@ import { h, fill, n0, n1, dayLabel } from '../dom.js';
 import { call } from '../api.js';
 import { state } from '../state.js';
 import { barChart, pctBars } from '../charts.js';
+import { fmtMins } from './today.js';
 
 let els = {};
 let range = 30;
@@ -56,6 +57,7 @@ async function refresh() {
     stat('Avg protein', `${n1(s.avgProt)} g`, `${s.protDays}/${food} days ≥ ${n0(hist.protFloor)} g`, tone(s.avgProt >= hist.protFloor)),
     stat('Avg fiber', s.avgFiber === null ? '—' : `${n1(s.avgFiber)} g`, `${s.fiberDays}/${food} days ≥ ${n0(hist.fiberFloor)} g`, s.avgFiber === null ? '' : tone(s.avgFiber >= hist.fiberFloor)),
     stat('Medicines', s.adherence === null ? '—' : `${n0(s.adherence)}%`, 'of doses taken', s.adherence === null ? '' : tone(s.adherence >= 90)),
+    stat('Avg sleep', s.avgSleepMins === null ? '—' : `${n1(s.avgSleepMins / 60)} h`, s.avgSleepMins === null ? 'log it on the Log' : `bed ${s.avgBed} · up ${s.avgWake}`, s.avgSleepMins === null ? '' : tone(s.avgSleepMins >= 420)),
     stat('Trained', `${s.daysTrained} days`, `of ${hist.days.length}`),
     stat('Days logged', String(s.daysUsed), `of ${hist.days.length}`),
   );
@@ -84,6 +86,13 @@ async function refresh() {
     data: days.map((d) => ({ label: short(d.date), v: d.mins, tone: 'train', tip: `${dayLabel(d.date, state.today)}: ${d.mins ? `${n0(d.mins)} min` : 'no training'}` })),
   });
 
+  const sleepChart = barChart({
+    title: 'Hours slept per night',
+    height: 120,
+    data: days.map((d) => ({ label: short(d.date), v: d.sleep ? d.sleep.mins / 60 : 0, tone: d.sleep ? (d.sleep.mins >= 420 ? 'sleep' : 'sleep short') : 'muted', tip: d.sleep ? `${dayLabel(d.date, state.today)}: ${fmtMins(d.sleep.mins)} (${d.sleep.bed}–${d.sleep.wake})` : `${dayLabel(d.date, state.today)}: not logged` })),
+    ref: 7,
+    refLabel: '7 h',
+  });
   const nutrients = nutrientGroups(s.nutrients, 'No nutrient data yet. Foods you add from the food database carry 30–40 nutrients each.');
 
   const meds = hist.meds.length
@@ -103,7 +112,8 @@ async function refresh() {
         chartCard('Calories', 'red = over target', kcal),
         chartCard('Protein', `line = ${n0(hist.protFloor)} g floor · faded = under it`, prot),
         chartCard('Fiber', `line = ${n0(hist.fiberFloor)} g floor · faded = under it`, fiber),
-        chartCard('Training', 'minutes per day', train))),
+        chartCard('Training', 'minutes per day', train),
+        chartCard('Sleep', 'hours per night · line = 7 h', sleepChart))),
     dayList,
   );
 }
@@ -133,7 +143,7 @@ function dayRow(d) {
   const btn = h('button', {
     type: 'button', class: 'item ghost day-row', 'data-hist': d.date, 'aria-expanded': 'false', 'aria-controls': panel.id,
     // The label is all a screen reader hears, so it carries the numbers too.
-    'aria-label': [dayLabel(d.date, state.today), `${n0(d.kcal)} kcal`, `${n1(d.prot)} g protein`, d.fiber === null ? null : `${n1(d.fiber)} g fiber`, d.mins ? `${n0(d.mins)} min trained` : null, d.due ? `meds ${d.taken} of ${d.due}` : null].filter(Boolean).join(', '),
+    'aria-label': [dayLabel(d.date, state.today), `${n0(d.kcal)} kcal`, `${n1(d.prot)} g protein`, d.fiber === null ? null : `${n1(d.fiber)} g fiber`, d.sleep ? `slept ${fmtMins(d.sleep.mins)}` : null, d.mins ? `${n0(d.mins)} min trained` : null, d.due ? `meds ${d.taken} of ${d.due}` : null].filter(Boolean).join(', '),
     onclick: async () => {
       const open = panel.classList.toggle('hidden') === false;
       btn.setAttribute('aria-expanded', String(open));
@@ -141,11 +151,13 @@ function dayRow(d) {
       fill(panel, h('p', { class: 'small muted', text: 'Loading…' }));
       const day = await call('get_day', { date: d.date });
       loaded = true;
-      fill(panel, nutrientGroups(day.nutrients, 'No nutrient data for this day. Foods from the food database carry 30–40 nutrients each; typed-in numbers only have calories, protein and fiber.'));
+      fill(panel,
+        d.sleep ? h('p', { class: 'small day-sleep', text: `Sleep: in bed ${d.sleep.bed}, up ${d.sleep.wake} · ${fmtMins(d.sleep.mins)}` }) : null,
+        nutrientGroups(day.nutrients, 'No nutrient data for this day. Foods from the food database carry 30–40 nutrients each; typed-in numbers only have calories, protein and fiber.'));
     },
   },
   h('span', { class: 'day-chevron', 'aria-hidden': 'true' }),
-  h('span', { class: 'name' }, h('b', { text: dayLabel(d.date, state.today) }), h('div', { class: 'meta', text: [d.mins ? `${n0(d.mins)} min trained` : null, d.due ? `meds ${d.taken}/${d.due}` : null].filter(Boolean).join(' · ') })),
+  h('span', { class: 'name' }, h('b', { text: dayLabel(d.date, state.today) }), h('div', { class: 'meta', text: [d.sleep ? `slept ${fmtMins(d.sleep.mins)}` : null, d.mins ? `${n0(d.mins)} min trained` : null, d.due ? `meds ${d.taken}/${d.due}` : null].filter(Boolean).join(' · ') })),
   h('span', { class: `num small ${d.over ? 'error' : ''}`, text: `${n0(d.kcal)} kcal` }),
   h('span', { class: `num small ${d.protMet ? 'ok' : 'muted'}`, text: `${n1(d.prot)} g` }),
   h('span', { class: `num small ${d.fiberMet ? 'ok' : 'muted'}`, text: d.fiber === null ? '—' : `${n1(d.fiber)} g fiber` }));

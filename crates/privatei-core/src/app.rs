@@ -7,6 +7,7 @@ use crate::food::{self, round1, Item, LocalEstimate};
 use crate::meds;
 use crate::model::*;
 use crate::nutrients::{self, Nut};
+use crate::sleep::{self, SleepView};
 use crate::store::{new_id, Store};
 use crate::training;
 use serde::{Deserialize, Serialize};
@@ -129,6 +130,8 @@ pub struct DayView {
     pub meals: Vec<MealGroup>,
     pub meds: Vec<DoseView>,
     pub workouts: Vec<WorkoutRow>,
+    /// Last night: the sleep that ended on this date.
+    pub sleep: Option<SleepView>,
     pub can_copy_yesterday: bool,
 }
 
@@ -351,6 +354,8 @@ pub struct HistDay {
     pub fiber_met: bool,
     pub over: bool,
     pub target: f64,
+    /// The night that ended on this day, if logged.
+    pub sleep: Option<SleepView>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -474,6 +479,11 @@ pub struct HistSummary {
     pub days_trained: usize,
     pub days_used: usize,
     pub nutrients: Vec<NutView>,
+    /// Over the nights logged in the period; None with no nights.
+    pub avg_sleep_mins: Option<f64>,
+    pub avg_bed: Option<String>,
+    pub avg_wake: Option<String>,
+    pub sleep_nights: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -907,8 +917,34 @@ impl Core {
                 .into_iter()
                 .map(|(id, w)| WorkoutRow { id: id.clone(), kind: w.kind.clone(), mins: w.mins, kcal: w.kcal, name: w.name.clone() })
                 .collect(),
+            sleep: self.store.get::<Sleep>(date).and_then(sleep::view),
             can_copy_yesterday: own_rows == 0 && y_rows > 0,
         })
+    }
+
+    /// Save the night that ended on `date`: bed and wake as "HH:MM".
+    pub fn set_sleep(&mut self, date: &str, bed: &str, wake: &str) -> Result<()> {
+        check_date(date)?;
+        if date > self.today().as_str() {
+            return Err("You can't log sleep for a day that hasn't come yet.".into());
+        }
+        let (Some(b), Some(w)) = (sleep::parse_hhmm(bed), sleep::parse_hhmm(wake)) else {
+            return Err("Use times like 23:30 and 07:00.".into());
+        };
+        let (bed, wake) = (sleep::fmt_hhmm(b), sleep::fmt_hhmm(w));
+        if sleep::duration(&bed, &wake).is_none() {
+            return Err("Bedtime and wake-up time can't be the same, or more than 20 hours apart.".into());
+        }
+        let ts = self.now();
+        self.store.put(date, Sleep { bed, wake, ts })
+    }
+
+    pub fn clear_sleep(&mut self, date: &str) -> Result<()> {
+        check_date(date)?;
+        if self.store.get::<Sleep>(date).is_some() {
+            self.store.delete::<Sleep>(date)?;
+        }
+        Ok(())
     }
 
     pub fn add_log(&mut self, date: &str, input: LogInput) -> Result<String> {
@@ -2282,7 +2318,8 @@ impl Core {
             tick_days.insert(t.date.as_str());
         }
         let medlist: Vec<(&String, &Med)> = self.store.all::<Med>().collect();
-        let used = |d: &str| food.contains_key(d) || mins.contains_key(d) || tick_days.contains(d);
+        let nights: HashMap<&str, SleepView> = self.store.all::<Sleep>().filter_map(|(d, s)| Some((d.as_str(), sleep::view(s)?))).collect();
+        let used = |d: &str| food.contains_key(d) || mins.contains_key(d) || tick_days.contains(d) || nights.contains_key(d);
         let mut first = start.clone();
         while first <= today && !used(&first) {
             first = dates::add_days(&first, 1);
@@ -2320,6 +2357,7 @@ impl Core {
                 fiber_met: a.fiber_known && a.fiber >= s.fiber_floor,
                 over: a.kcal > target,
                 target: target.round(),
+                sleep: nights.get(d.as_str()).cloned(),
                 date: d.clone(),
             });
             d = dates::add_days(&d, 1);
@@ -2344,6 +2382,8 @@ impl Core {
         }
         let navg: Nut = nsum.iter().map(|(k, v)| (k.clone(), v / nknown[k] as f64)).collect();
         let nutrient_views = nut_views(&navg, &nknown, food_days.len(), s.fiber_floor);
+        let slept: Vec<&SleepView> = days.iter().filter_map(|d| d.sleep.as_ref()).collect();
+        let clock = |f: fn(&SleepView) -> &str| slept.iter().filter_map(|v| sleep::parse_hhmm(f(v))).collect::<Vec<u32>>();
         let summary = HistSummary {
             avg_kcal: if food_days.is_empty() { 0.0 } else { (food_days.iter().map(|d| d.kcal).sum::<f64>() / fd).round() },
             avg_prot: if food_days.is_empty() { 0.0 } else { round1(food_days.iter().map(|d| d.prot).sum::<f64>() / fd) },
@@ -2355,6 +2395,11 @@ impl Core {
             days_trained: days.iter().filter(|d| d.mins > 0.0).count(),
             days_used: used_days.len(),
             nutrients: nutrient_views,
+            avg_sleep_mins: (!slept.is_empty()).then(|| (slept.iter().map(|v| v.mins).sum::<f64>() / slept.len() as f64).round()),
+            // Bedtimes average around midnight (pivot noon); wake times around morning (pivot 18:00).
+            avg_bed: sleep::avg_clock(&clock(|v| &v.bed), 12 * 60),
+            avg_wake: sleep::avg_clock(&clock(|v| &v.wake), 18 * 60),
+            sleep_nights: slept.len(),
         };
         let meds: Vec<MedHist> =
             med_hist.into_values().map(|(name, taken, due)| MedHist { name, taken, due, missed: due - taken }).collect();
@@ -2388,6 +2433,19 @@ impl Core {
                 &format!("{gaps} day{} without food logged", if gaps == 1 { "" } else { "s" }),
                 "Averages only count days with food, so gaps can hide a pattern.",
             ));
+        }
+        // Sleep: needs a few nights before it says anything.
+        if let (Some(avg), true) = (sum.avg_sleep_mins, sum.sleep_nights >= 3) {
+            let hours = format_mins(avg);
+            let times = match (&sum.avg_bed, &sum.avg_wake) {
+                (Some(b), Some(w)) => format!(" Usually in bed by {b}, up at {w}."),
+                _ => String::new(),
+            };
+            if avg < 7.0 * 60.0 {
+                out.push(Insight::warn(&format!("Sleeping {hours} a night on average"), &format!("Most adults need 7–9 hours.{times}")));
+            } else {
+                out.push(Insight::good(&format!("Sleeping {hours} a night"), &format!("Within the 7–9 hours most adults need.{times}")));
+            }
         }
         if n == 0 {
             return out;
@@ -2603,5 +2661,15 @@ fn plan_meal_at<'a>(meals: &'a [PlanMeal], idx: usize, expect: Option<&str>) -> 
     match meals.get(idx) {
         Some(m) if expect.is_none_or(|n| n == m.name) => Ok(m),
         _ => Err("That meal isn't in the plan any more.".into()),
+    }
+}
+
+/// 450 → "7 h 30 min"; 420 → "7 h".
+pub fn format_mins(m: f64) -> String {
+    let m = m.round() as i64;
+    match (m / 60, m % 60) {
+        (0, r) => format!("{r} min"),
+        (h, 0) => format!("{h} h"),
+        (h, r) => format!("{h} h {r} min"),
     }
 }
