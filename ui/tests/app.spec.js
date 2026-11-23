@@ -1009,3 +1009,20 @@ test('The app opens in the Log · Plan · Kitchen · Meds · Training · History
   await expect(page.locator('nav.tabs button[data-tab]')).toHaveText([/Log/, /Plan/, /Kitchen/, /Meds/, /Training/, /History/]);
   await expect(page.locator('.layout-switcher')).toHaveCount(0);
 });
+
+test('Desktop sidebar shows the app icon beside the name; narrow sidebar shows just the icon', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await open(page, 'seed=demo&layout=new');
+  const icon = page.locator('nav.tabs .brand-icon');
+  await expect(icon).toBeVisible();
+  expect(await icon.evaluate((i) => i.complete && i.naturalWidth > 0)).toBe(true);
+  const ib = await icon.boundingBox();
+  const tb = await page.locator('nav.tabs .brand span').boundingBox();
+  expect(Math.abs(ib.y + ib.height / 2 - (tb.y + tb.height / 2))).toBeLessThan(4);
+  expect(tb.x).toBeGreaterThan(ib.x + ib.width);
+  await page.setViewportSize({ width: 860, height: 800 });
+  await expect(icon).toBeVisible();
+  await expect(page.locator('nav.tabs .brand span')).toBeHidden();
+  await page.setViewportSize({ width: 375, height: 800 });
+  await expect(icon).toBeHidden();
+});
