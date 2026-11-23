@@ -101,12 +101,19 @@ function renderTargets() {
   const kcal = field('set-kcal', 'Daily calories', s.kcalTarget, 800, 6000, '10', 'kcal');
   const prot = field('set-prot', 'Protein floor', s.protFloor, 0, 400, '1', 'g');
   const fiber = field('set-fiber', 'Fiber floor', s.fiberFloor ?? 30, 0, 100, '1', 'g');
+  // An empty box is not 0: Number('') would quietly save a floor of 0.
+  const num = (f) => (f.firstChild.value.trim() === '' ? NaN : Number(f.firstChild.value));
+  const bad = (f, msg) => {
+    f.firstChild.setAttribute('aria-invalid', 'true');
+    return say(st, msg, 'error');
+  };
   const save = async () => {
-    const w = Number(weight.firstChild.value), k = Number(kcal.firstChild.value), p = Number(prot.firstChild.value), f = Number(fiber.firstChild.value);
-    if (!(w >= 30 && w <= 300)) return say(st, 'Weight must be between 30 and 300 kg.', 'error');
-    if (!(k >= 800 && k <= 6000)) return say(st, 'Daily calories must be between 800 and 6000.', 'error');
-    if (!(p >= 0 && p <= 400)) return say(st, 'Protein floor must be between 0 and 400 g.', 'error');
-    if (!(f >= 0 && f <= 100)) return say(st, 'Fiber floor must be between 0 and 100 g.', 'error');
+    for (const x of [weight, kcal, prot, fiber]) x.firstChild.removeAttribute('aria-invalid');
+    const w = num(weight), k = num(kcal), p = num(prot), f = num(fiber);
+    if (!(w >= 30 && w <= 300)) return bad(weight, 'Weight must be between 30 and 300 kg.');
+    if (!(k >= 800 && k <= 6000)) return bad(kcal, 'Daily calories must be between 800 and 6000.');
+    if (!(p >= 0 && p <= 400)) return bad(prot, 'Protein floor must be between 0 and 400 g.');
+    if (!(f >= 0 && f <= 100)) return bad(fiber, 'Fiber floor must be between 0 and 100 g.');
     if (w === s.weightKg && k === s.kcalTarget && p === s.protFloor && f === s.fiberFloor) return say(st, '');
     try {
       await quiet('save_settings', { settings: { ...s, weightKg: w, kcalTarget: k, protFloor: p, fiberFloor: f } });
@@ -330,8 +337,19 @@ async function renderUpdates() {
   const v = await appVersion();
   const st = status('update-status');
   const btn = h('button', { type: 'button', id: 'check-updates' }, 'Check for updates');
+  // One handler: it checks first; once an update is found the same button installs it.
+  let found = null;
   btn.addEventListener('click', async () => {
     btn.disabled = true;
+    if (found) {
+      try {
+        await install(found, (p) => say(st, `Downloading… ${p}%`));
+      } catch (err) {
+        say(st, `Update failed: ${message(err)}`, 'error');
+        btn.disabled = false;
+      }
+      return;
+    }
     say(st, 'Checking…');
     try {
       const u = await findUpdate();
@@ -340,19 +358,10 @@ async function renderUpdates() {
         btn.disabled = false;
         return;
       }
+      found = u;
       say(st, `Version ${u.version} is available.`);
       btn.textContent = 'Install and restart';
       btn.disabled = false;
-      btn.onclick = async (e) => {
-        e.stopImmediatePropagation();
-        btn.disabled = true;
-        try {
-          await install(u, (p) => say(st, `Downloading… ${p}%`));
-        } catch (err) {
-          say(st, `Update failed: ${message(err)}`, 'error');
-          btn.disabled = false;
-        }
-      };
     } catch (e) {
       say(st, `Couldn’t check: ${message(e)}`, 'error');
       btn.disabled = false;

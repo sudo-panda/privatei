@@ -68,6 +68,7 @@ export function foodSearch(opts) {
   });
 
   function pick(f) {
+    seq++; // a search still on its way must not reopen the results over the picked food
     results.classList.add('hidden');
     picked.classList.remove('hidden');
     let meal = (typeof opts.meal === 'function' ? opts.meal() : opts.meal) || null;
@@ -80,8 +81,16 @@ export function foodSearch(opts) {
       preview.textContent = `${n0(f.kcal100 * k)} kcal · ${n1(f.prot100 * k)} g protein${f.fiber100 != null ? ` · ${n1(f.fiber100 * k)} g fiber` : ''}`;
     };
     grams.addEventListener('input', show);
+    // Enter in the grams box is the same as pressing Add.
+    grams.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addBtn.click();
+      }
+    });
     show();
     const portions = [{ label: '100 g', grams: 100 }, ...f.portions].slice(0, 7);
+    let addBtn;
     fill(
       picked,
       h('div', { class: 'row spread wrap' }, h('b', { text: f.name }), h('span', { class: `badge src-${f.source}`, text: f.sourceName })),
@@ -91,13 +100,15 @@ export function foodSearch(opts) {
       meal ? chipGroup(['Breakfast', 'Lunch', 'Snack', 'Dinner'].map((m) => [m, m]), meal, (v) => (meal = v), 'Meal') : null,
       h('div', { class: 'grid2' },
         h('button', { type: 'button', onclick: reset }, 'Cancel'),
-        h('button', { type: 'button', class: 'primary', onclick: async () => { const g = Number(grams.value); if (!(g > 0 && g <= 5000)) return grams.focus(); if ((await opts.onPick(f, g, meal)) !== false) reset(); } }, opts.confirmLabel || 'Add')),
+        (addBtn = h('button', { type: 'button', class: 'primary', onclick: async () => { const g = Number(grams.value); if (!(g > 0 && g <= 5000)) return grams.focus(); if ((await opts.onPick(f, g, meal)) !== false) reset(); } }, opts.confirmLabel || 'Add'))),
     );
     grams.focus();
     grams.select();
   }
 
   function reset() {
+    seq++;
+    clearTimeout(timer);
     picked.classList.add('hidden');
     fill(picked);
     input.value = '';

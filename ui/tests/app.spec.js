@@ -619,15 +619,19 @@ test('A dish with toppings stays one item; find it as a packaged product', async
   await expect(page.locator('#food-search')).toHaveValue('1 daemilio pizza with mushroom and ham');
 });
 
-test('Add food opens as a centred panel at any width', async ({ page }) => {
-  for (const [w, hgt] of [[1280, 900], [400, 800]]) {
+test('Add food opens near the top, stays put as results come, and fits the window', async ({ page }) => {
+  for (const [w, hgt] of [[1280, 900], [1280, 640], [400, 800]]) {
     await page.setViewportSize({ width: w, height: hgt });
     await open(page, 'seed=demo&layout=new&hhmm=12:00');
     await page.locator('#open-add').click();
-    const box = await page.locator('.overlay-sheet').boundingBox();
-    const middle = box.y + box.height / 2;
-    expect(Math.abs(middle - hgt / 2), `vertically centred at ${w}px`).toBeLessThan(hgt * 0.15);
-    expect(box.y, `not stuck to the bottom at ${w}px`).toBeGreaterThan(8);
+    const before = await page.locator('.overlay-sheet').boundingBox();
+    expect(before.y, `not stuck to the top edge at ${w}×${hgt}`).toBeGreaterThan(8);
+    expect(before.y, `near the top at ${w}×${hgt}`).toBeLessThan(hgt * 0.12);
+    await page.locator('#food-search').fill('lentils');
+    await expect(page.locator('.food-hit').first()).toBeVisible();
+    const after = await page.locator('.overlay-sheet').boundingBox();
+    expect(after.y, `doesn't jump at ${w}×${hgt}`).toBe(before.y);
+    expect(after.y + after.height, `fits the window at ${w}×${hgt}`).toBeLessThanOrEqual(hgt);
   }
 });
 
@@ -714,4 +718,196 @@ test('The settings gear is hidden on the Settings page', async ({ page }) => {
   await expect(page.locator('#open-settings')).toBeHidden();
   await tab(page, 'today').click();
   await expect(page.locator('#open-settings')).toBeVisible();
+});
+
+// ---------- Bugs from the UI review ----------
+
+test('A double click saves once: add food, plan meal, training', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&hhmm=12:00&delay=200');
+  const calls = (cmd) => page.evaluate((c) => window.__mock.calls.filter((x) => x === c).length, cmd);
+  await page.locator('#open-add').click();
+  await page.locator('#food-search').fill('lentils');
+  await page.locator('.food-hit').first().click();
+  await page.locator('.food-picked').getByRole('button', { name: 'Add to log' }).dblclick();
+  await expect(page.locator('.food-picked')).toBeHidden();
+  expect(await calls('add_food')).toBe(1);
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: 'Add training' }).click();
+  await page.locator('#tr-mins').fill('30');
+  await page.getByRole('button', { name: 'Save training' }).dblclick();
+  await expect(page.locator('.backdrop:not(.hidden) .sheet')).toHaveCount(0);
+  expect(await calls('add_workout')).toBe(1);
+});
+
+test('Double-clicking "Remove from plan" removes only that meal', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=rich&layout=new&hhmm=13:10&delay=150');
+  await tab(page, 'plan').click();
+  const today = page.locator('.plan-day').first();
+  await expect(today.getByLabel('Edit Skyr, oats, raspberries')).toBeVisible();
+  const before = await today.locator('[aria-label^="Edit "]').count();
+  await today.getByLabel('Edit Skyr, oats, raspberries').click();
+  await page.getByRole('button', { name: 'Remove from plan' }).dblclick();
+  await expect(today).not.toContainText('Skyr, oats, raspberries');
+  await expect(today.locator('[aria-label^="Edit "]')).toHaveCount(before - 1);
+  await expect(today).toContainText('Tofu bowl');
+});
+
+test('Clicking days quickly shows the last one clicked; two Previous clicks go back two days', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&hhmm=12:00');
+  // The first day's answer is slow, the second's fast: the slow one must not win.
+  await page.evaluate(() => { window.__mockDelay = (cmd, a) => (cmd === 'get_day' && a.date === '2026-11-15' ? 400 : 20); });
+  await page.locator('.strip-day[data-date="2026-11-15"]').click();
+  await page.locator('.strip-day[data-date="2026-11-20"]').click();
+  await page.waitForTimeout(600);
+  await expect(page.locator('.strip-day[aria-pressed="true"]')).toHaveAttribute('data-date', '2026-11-20');
+  await expect(page.locator('#date-chip')).toContainText('20');
+  await page.evaluate(() => { window.__mockDelay = () => 150; });
+  await page.getByLabel('Previous day').click();
+  await page.getByLabel('Previous day').click();
+  await expect(page.locator('.strip-day[aria-pressed="true"]')).toHaveAttribute('data-date', '2026-11-18');
+});
+
+test('Editing grams updates the amount in the name; 0 kcal foods can be edited', async ({ page }) => {
+  await open(page);
+  await page.getByLabel('Previous day').click();
+  await page.getByLabel('Edit Skyr · 200 g').click();
+  await page.locator('#ed-grams').fill('100');
+  await expect(page.locator('#ed-name')).toHaveValue('Skyr · 100 g');
+  await page.locator('#ed-kcal').fill('0');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.sheet')).toHaveCount(0);
+  await page.getByLabel('Edit Skyr · 100 g').click();
+  await expect(page.locator('#ed-kcal')).toHaveValue('0');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.sheet')).toHaveCount(0);
+});
+
+test('Settings: an empty protein or fiber floor is refused, not saved as 0', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new');
+  await page.locator('#open-settings').click();
+  const before = await page.evaluate(() => window.__mock.settings.protFloor);
+  await page.locator('#set-prot').fill('');
+  await page.locator('#set-prot').blur();
+  await expect(page.locator('#targets-status')).toContainText('Protein floor must be between');
+  await expect(page.locator('#set-prot')).toHaveAttribute('aria-invalid', 'true');
+  expect(await page.evaluate(() => window.__mock.settings.protFloor)).toBe(before);
+  await page.locator('#set-fiber').fill('');
+  await page.locator('#set-fiber').blur();
+  expect(await page.evaluate(() => window.__mock.settings.fiberFloor)).not.toBe(0);
+});
+
+test('Install and restart installs without checking again', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&update=0.5.0');
+  await page.locator('#open-settings').click();
+  const checks = () => page.evaluate(() => window.__mock.calls.filter((x) => x === 'plugin:updater|check').length);
+  await page.locator('#check-updates').click();
+  await expect(page.locator('#check-updates')).toHaveText('Install and restart');
+  const n = await checks();
+  await page.locator('#check-updates').click();
+  await expect(page.locator('#update-status')).toContainText('Update failed');
+  expect(await checks()).toBe(n);
+  expect(await page.evaluate(() => window.__mock.calls.filter((x) => x === 'plugin:updater|download_and_install').length)).toBe(1);
+});
+
+test('Food results never overlap, and the online button sits below them', async ({ page }) => {
+  for (const [w, hgt] of [[1280, 900], [360, 740]]) {
+    await page.setViewportSize({ width: w, height: hgt });
+    await open(page, 'seed=demo&layout=new&hhmm=12:00');
+    await page.locator('#open-add').click();
+    await page.locator('#food-search').fill('a');
+    await page.locator('#food-search').fill('ap');
+    await expect(page.locator('.food-hit').first()).toBeVisible();
+    const boxes = await page.locator('.food-results > *').evaluateAll((els) => els.map((e) => [e.offsetTop, e.offsetHeight]));
+    expect(boxes.length).toBeGreaterThan(2);
+    for (let i = 1; i < boxes.length; i++) {
+      expect(boxes[i][0], `row ${i} starts below row ${i - 1} at ${w}px`).toBeGreaterThanOrEqual(boxes[i - 1][0] + boxes[i - 1][1] - 1);
+    }
+  }
+});
+
+test('Sheets never show a stray "null"', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=rich&layout=new&hhmm=13:10');
+  const sheet = page.locator('.backdrop:not(.hidden) .sheet');
+  await page.locator('[aria-label^="Edit "].food-row').first().click();
+  await expect(sheet).toBeVisible();
+  await expect(sheet).not.toContainText('null');
+  await page.keyboard.press('Escape');
+  await tab(page, 'plan').click();
+  await page.locator('.plan-day').first().getByLabel('Edit Tofu bowl').click();
+  await expect(sheet).toBeVisible();
+  await expect(sheet).not.toContainText('null');
+  await page.keyboard.press('Escape');
+  await tab(page, 'meds').click();
+  await page.getByRole('button', { name: 'Add medicine' }).click();
+  await expect(sheet).toBeVisible();
+  await expect(sheet).not.toContainText('null');
+});
+
+test('Meds: a new medicine shows in Today straight away', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&hhmm=07:00');
+  await tab(page, 'meds').click();
+  await page.getByRole('button', { name: 'Add medicine' }).click();
+  await page.locator('#med-name').fill('Iron');
+  await page.locator('#med-dose').fill('1 tablet');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByLabel('Took Iron')).toBeVisible();
+  await page.getByLabel('Edit Iron').click();
+  await page.getByRole('button', { name: 'Stop taking' }).click();
+  await expect(page.getByLabel('Took Iron')).toHaveCount(0);
+});
+
+test('History "Day by day" shows that it opens', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=rich&layout=new');
+  await tab(page, 'history').click();
+  const summary = page.locator('details > summary', { hasText: 'Day by day' });
+  const w = await summary.evaluate((el) => parseFloat(getComputedStyle(el, '::before').width));
+  expect(w).toBeGreaterThan(4);
+});
+
+test('Add training from the Training tab keeps the Log on the day you were looking at', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&hhmm=12:00');
+  await page.getByLabel('Previous day').click();
+  await expect(page.locator('.strip-day[aria-pressed="true"]')).toHaveAttribute('data-date', '2026-11-21');
+  await tab(page, 'training').click();
+  await page.getByRole('button', { name: 'Add training' }).click();
+  await page.locator('#tr-mins').fill('20');
+  await page.getByRole('button', { name: 'Save training' }).click();
+  await expect(page.locator('.card[aria-label="Training log"]')).toContainText('Today');
+  await tab(page, 'today').click();
+  await expect(page.locator('.strip-day[aria-pressed="true"]')).toHaveAttribute('data-date', '2026-11-21');
+});
+
+test('Keyboard focus survives redraws and stays inside open sheets', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&hhmm=12:00');
+  await page.locator('.strip-day[data-date="2026-11-19"]').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.strip-day[aria-pressed="true"]')).toHaveAttribute('data-date', '2026-11-19');
+  expect(await page.evaluate(() => document.activeElement.dataset.date)).toBe('2026-11-19');
+
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByLabel('Ate Tofu bowl').focus();
+  await page.keyboard.press('Space');
+  await expect(page.getByTestId('kcal')).toHaveText('520');
+  expect(await page.evaluate(() => document.activeElement.getAttribute('aria-label'))).toBe('Ate Tofu bowl');
+
+  await page.getByRole('button', { name: 'Add training' }).click();
+  for (let i = 0; i < 25; i++) {
+    await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => !!document.activeElement.closest('.sheet'))).toBe(true);
+  }
+  await page.keyboard.press('Shift+Tab');
+  expect(await page.evaluate(() => !!document.activeElement.closest('.sheet'))).toBe(true);
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => document.activeElement.textContent)).toContain('Add training');
 });

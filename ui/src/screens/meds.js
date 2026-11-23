@@ -1,5 +1,6 @@
 import { h, fill, toast, openSheet, confirmSheet, chipGroup, weekdayShort } from '../dom.js';
 import { call, quiet, message } from '../api.js';
+import { changed } from '../state.js';
 
 let els = {};
 
@@ -115,7 +116,7 @@ function openEditor(m, stopped = false) {
         const r = await quiet('save_med', { med: input });
         toast(r.startedNew ? 'Saved — new schedule from today' : 'Saved');
         close();
-        refresh();
+        changed(); // the Today doses too, not just the schedules
       } catch (e) {
         err.textContent = message(e);
       }
@@ -142,7 +143,7 @@ function openEditor(m, stopped = false) {
                     await call('stop_med', { groupId: m.groupId });
                     toast(`Stopped ${m.name}`);
                     close();
-                    refresh();
+                    changed();
                   },
                 }, 'Stop taking'),
             h('button', {
@@ -154,7 +155,7 @@ function openEditor(m, stopped = false) {
                 await call('erase_med', { groupId: m.groupId });
                 toast(`Erased ${m.name}`);
                 close();
-                refresh();
+                changed();
               },
             }, 'Erase'),
           )

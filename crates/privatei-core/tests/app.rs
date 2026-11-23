@@ -71,7 +71,7 @@ fn plan_ticks_31_rapid_toggles_consistent() {
     .unwrap();
     assert_eq!(c.day("2026-11-22").unwrap().kcal, 0.0, "plan counts only when ticked");
     for _ in 0..31 {
-        c.toggle_plan("2026-11-22", 0).unwrap();
+        c.toggle_plan("2026-11-22", 0, None).unwrap();
     }
     let d = c.day("2026-11-22").unwrap();
     assert!(d.plan[0].done);
@@ -98,7 +98,7 @@ fn copy_yesterday() {
         vec![PlanMeal { slot: "Dinner".into(), name: "Plan meal".into(), kcal: 600.0, prot: 40.0, ..Default::default() }],
     )
     .unwrap();
-    c.toggle_plan("2026-11-21", 0).unwrap();
+    c.toggle_plan("2026-11-21", 0, None).unwrap();
     assert!(c.day("2026-11-22").unwrap().can_copy_yesterday);
     assert_eq!(c.copy_yesterday("2026-11-22").unwrap(), 2, "plan rows are not copied");
     assert_eq!(c.day("2026-11-22").unwrap().kcal, 420.0);
@@ -308,7 +308,7 @@ fn repeat_last_week() {
         let d = privatei_core::dates::add_days("2026-11-16", i);
         c.set_plan(&d, vec![meal(&format!("Meal {i}"))]).unwrap();
     }
-    c.toggle_plan("2026-11-23", 0).unwrap();
+    c.toggle_plan("2026-11-23", 0, None).unwrap();
     // Latest 7 planned days: 17..23. 23+7 = 30; 22+7=29 … 17+7=24. All empty → 7 copies.
     assert_eq!(c.repeat_last_week().unwrap(), 7);
     let p = c.store.get::<Plan>("2026-11-30").unwrap();
@@ -535,7 +535,7 @@ fn plan_ahead_shows_today_onwards() {
     assert_eq!(p.days[2].meals.len(), 1);
     assert_eq!(p.planned_days, 2);
     assert!(p.has_earlier);
-    c.remove_plan_meal("2026-11-22", 0).unwrap();
+    c.remove_plan_meal("2026-11-22", 0, None).unwrap();
     assert_eq!(c.plan_ahead(1).days[0].kcal, 1000.0);
 }
 
@@ -583,10 +583,11 @@ fn edit_log_plan_and_training() {
     // A ticked plan meal and its log row stay in step both ways.
     c.set_plan("2026-11-22", vec![PlanMeal { slot: "Lunch".into(), name: "Bowl".into(), kcal: 500.0, prot: 30.0, ..Default::default() }])
         .unwrap();
-    c.toggle_plan("2026-11-22", 0).unwrap();
+    c.toggle_plan("2026-11-22", 0, None).unwrap();
     c.update_plan_meal(
         "2026-11-22",
         0,
+        Some("Bowl"),
         PlanMeal { slot: "Lunch".into(), name: "Big bowl".into(), kcal: 700.0, prot: 40.0, ..Default::default() },
     )
     .unwrap();
@@ -679,4 +680,46 @@ fn day_always_has_all_four_meals() {
     .unwrap();
     assert_eq!(names(&c)[2], ("Snack".into(), 1));
     assert_eq!(names(&c).len(), 4);
+}
+
+#[test]
+fn plan_meal_actions_check_the_name_so_a_second_click_cant_hit_the_next_meal() {
+    let mut c = core("2026-11-22", "12:00");
+    let m = |name: &str| PlanMeal { slot: "Lunch".into(), name: name.into(), kcal: 400.0, prot: 20.0, ..Default::default() };
+    c.set_plan("2026-11-22", vec![m("Bowl"), m("Soup")]).unwrap();
+    c.remove_plan_meal("2026-11-22", 0, Some("Bowl")).unwrap();
+    // The double click: index 0 is now Soup.
+    assert!(c.remove_plan_meal("2026-11-22", 0, Some("Bowl")).is_err());
+    assert!(c.toggle_plan("2026-11-22", 0, Some("Bowl")).is_err());
+    assert!(c.update_plan_meal("2026-11-22", 0, Some("Bowl"), m("Stew")).is_err());
+    let d = c.day("2026-11-22").unwrap();
+    assert_eq!((d.plan.len(), d.plan[0].name.as_str(), d.plan[0].done), (1, "Soup", false));
+    assert!(c.toggle_plan("2026-11-22", 0, Some("Soup")).unwrap());
+}
+
+#[test]
+fn edit_log_renames_the_amount_and_allows_zero_kcal() {
+    let mut c = core("2026-11-22", "12:00");
+    let edit = |name: &str, g: f64, kcal: f64| LogInput {
+        meal: "Lunch".into(),
+        name: name.into(),
+        grams: Some(g),
+        kcal,
+        prot: 0.0,
+        est: false,
+        fiber: None,
+        nut: None,
+        food_ref: None,
+    };
+    let id = c.add_log("2026-11-22", edit("Skyr · 200 g", 200.0, 124.0)).unwrap();
+    c.update_log(&id, edit("Skyr · 200 g", 100.0, 62.0)).unwrap();
+    assert_eq!(c.day("2026-11-22").unwrap().meals[1].rows[0].name, "Skyr · 100 g");
+    // 0 kcal (water, black coffee) can be edited like anything else.
+    c.update_log(&id, edit("Sparkling water · 100 g", 250.0, 0.0)).unwrap();
+    let row = &c.day("2026-11-22").unwrap().meals[1].rows[0];
+    assert_eq!((row.name.as_str(), row.kcal), ("Sparkling water · 250 g", 0.0));
+    // A name without the old amount is left as typed.
+    c.update_log(&id, edit("Water", 300.0, 0.0)).unwrap();
+    assert_eq!(c.day("2026-11-22").unwrap().meals[1].rows[0].name, "Water");
+    assert!(c.update_log(&id, edit("x", 10.0, -1.0)).is_err());
 }

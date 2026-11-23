@@ -61,8 +61,7 @@ function buildRules(body, initial) {
           onclick: async () => {
             rules = await call('apply_rule_change', { change: r.change });
             showRules();
-            apply.disabled = true;
-            apply.textContent = 'Applied';
+            apply.replaceWith(h('span', { class: 'small muted', text: 'Applied' }));
             toast('Rules updated');
           },
         }, 'Apply');

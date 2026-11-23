@@ -7,7 +7,7 @@ export function h(tag, props = {}, ...kids) {
     if (k === 'class') el.className = v;
     else if (k === 'text') el.textContent = v;
     else if (k === 'html') throw new Error('no innerHTML');
-    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), busyWhileSaving(el, k.slice(2), v));
     else if (k === 'value') el.value = v;
     else if (k === 'checked') el.checked = !!v;
     else if (k === 'disabled') el.disabled = !!v;
@@ -18,10 +18,32 @@ export function h(tag, props = {}, ...kids) {
   return el;
 }
 
+/**
+ * A button click (or checkbox change) that saves something returns a promise. Until it
+ * settles the control is disabled, so a double click can't save twice.
+ */
+function busyWhileSaving(el, type, fn) {
+  const guard = (el.tagName === 'BUTTON' && type === 'click') || (el.tagName === 'INPUT' && type === 'change');
+  if (!guard) return fn;
+  return function (e) {
+    const out = fn.call(this, e);
+    if (!out || typeof out.then !== 'function') return out;
+    const was = el.disabled;
+    el.disabled = true;
+    el.setAttribute('aria-busy', 'true');
+    const done = () => {
+      el.disabled = was;
+      el.removeAttribute('aria-busy');
+    };
+    out.then(done, done);
+    return out;
+  };
+}
+
 function append(el, kids) {
   for (const k of kids.flat(Infinity)) {
     if (k === null || k === undefined || k === false) continue;
-    el.append(k instanceof Node ? k : document.createTextNode(String(k)));
+    Element.prototype.append.call(el, k instanceof Node ? k : document.createTextNode(String(k)));
   }
 }
 
@@ -86,6 +108,8 @@ const sheets = [];
 export function openSheet(title, build, { onClose } = {}) {
   const prevFocus = document.activeElement;
   const body = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title });
+  // Builders pass `cond ? el : null`; skip those instead of printing "null".
+  body.append = (...kids) => append(body, kids);
   const back = h('div', { class: 'backdrop' }, body);
   let closed = false;
   const close = () => {
@@ -94,7 +118,7 @@ export function openSheet(title, build, { onClose } = {}) {
     back.remove();
     sheets.splice(sheets.indexOf(close), 1);
     onClose && onClose();
-    if (prevFocus && prevFocus.focus) prevFocus.focus();
+    refocus(prevFocus);
   };
   back.addEventListener('mousedown', (e) => {
     if (e.target === back) close();
@@ -102,8 +126,10 @@ export function openSheet(title, build, { onClose } = {}) {
   body.append(h('div', { class: 'sheet-head' }, h('h2', { text: title }), iconButton('close', 'Close', close, 'icon')));
   build(body, close);
   document.body.append(back);
+  close.el = body;
   sheets.push(close);
-  const first = body.querySelector('input, textarea, select');
+  // Into the sheet: the first box, else its main button (a confirm has no box), else Close.
+  const first = body.querySelector('input, textarea, select') || body.querySelector('.actions button, button.primary') || body.querySelector('button');
   if (first) first.focus();
   return close;
 }
@@ -122,8 +148,9 @@ export function overlay(title) {
     open = false;
     back.classList.add('hidden');
     sheets.splice(sheets.indexOf(close), 1);
-    if (prevFocus && prevFocus.focus) prevFocus.focus();
+    refocus(prevFocus);
   };
+  close.el = body;
   back.addEventListener('mousedown', (e) => {
     if (e.target === back) close();
   });
@@ -150,12 +177,81 @@ export function anySheetOpen() {
   return sheets.length > 0;
 }
 
+let tabBack = false;
+const focusables = (box) => [...box.querySelectorAll(FOCUSABLE)].filter((x) => x.getClientRects().length && !x.closest('.hidden') && !inClosedDetails(x));
+
+const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], summary, [tabindex]:not([tabindex="-1"])';
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && sheets.length) {
     e.preventDefault();
     sheets[sheets.length - 1]();
   }
+  // Tab stays inside the open sheet instead of wandering into the page behind it.
+  if (e.key === 'Tab' && sheets.length) {
+    tabBack = e.shiftKey;
+    const box = sheets[sheets.length - 1].el;
+    const items = focusables(box);
+    if (!items.length) return;
+    // Step through the sheet's controls ourselves, wrapping at the ends. Doing it by hand
+    // works the same in every browser (Safari's own Tab skips buttons and leaves the page).
+    e.preventDefault();
+    const i = items.indexOf(document.activeElement);
+    const n = items.length;
+    const next = i < 0 ? (e.shiftKey ? n - 1 : 0) : (i + (e.shiftKey ? -1 : 1) + n) % n;
+    items[next].focus();
+  }
 });
+
+/** Inside a closed <details> (its summary excepted): laid out, but Tab skips it. */
+function inClosedDetails(x) {
+  for (let d = x.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) {
+    if (!d.open && !(x.closest('summary') && x.closest('summary').parentElement === d)) return true;
+  }
+  return false;
+}
+
+/** A selector that finds the same control after a redraw: id, date, food, part, chip value or label. */
+function focusKey(el) {
+  if (!el || !el.tagName) return null;
+  if (el.id) return `#${CSS.escape(el.id)}`;
+  const tag = el.tagName.toLowerCase();
+  for (const a of ['data-date', 'data-ref', 'data-part', 'data-range', 'data-trip', 'aria-label']) {
+    const v = el.getAttribute(a);
+    if (v) return `${tag}[${a}="${CSS.escape(v)}"]`;
+  }
+  return null;
+}
+
+/** Focus `el`, or, if a redraw replaced it, the control that took its place. */
+function refocus(el) {
+  if (!el || !el.focus) return;
+  if (el.isConnected) return el.focus({ preventScroll: true });
+  const sel = focusKey(el);
+  const next = sel && document.querySelector(sel);
+  if (next && !next.closest('.hidden')) next.focus({ preventScroll: true });
+}
+
+// Screens redraw their read-only parts after every change. When that removes the focused
+// control (a day in the date bar, a ticked checkbox), keyboard focus would fall back to the
+// top of the page; put it on the replacement instead.
+let lastFocus = null;
+document.addEventListener('focusin', (e) => {
+  lastFocus = e.target;
+  // Safari's Tab skips buttons, so it can step past the sheet's ends: bring it back in.
+  if (!sheets.length) return;
+  const box = sheets[sheets.length - 1].el;
+  if (box.contains(e.target)) return;
+  const items = focusables(box);
+  if (items.length) (tabBack ? items[items.length - 1] : items[0]).focus();
+});
+new MutationObserver(() => {
+  const a = lastFocus;
+  if (!a || a.isConnected) return;
+  if (document.activeElement && document.activeElement !== document.body) return;
+  lastFocus = null;
+  refocus(a);
+}).observe(document.body, { childList: true, subtree: true });
 
 /** A yes/no confirmation sheet. */
 export function confirmSheet(title, message, okLabel) {

@@ -939,13 +939,25 @@ impl Core {
         if name.is_empty() {
             return Err("Give the food a name.".into());
         }
-        if !(input.kcal > 0.0 && input.kcal < 5000.0) {
-            return Err("Calories must be above 0 and below 5000.".into());
+        // 0 is fine (water, black coffee): add_food logs those too.
+        if !(input.kcal >= 0.0 && input.kcal < 5000.0) {
+            return Err("Calories must be between 0 and 5000.".into());
         }
         if !(0.0..=500.0).contains(&input.prot) {
             return Err("Protein must be between 0 and 500 g.".into());
         }
         let grams = input.grams.filter(|g| *g > 0.0 && g.is_finite());
+        // "Skyr · 200 g" changed to 100 g reads "Skyr · 100 g", not the old amount.
+        let name = match (l.grams, grams) {
+            (Some(old), Some(new)) if old != new => {
+                let tail = format!(" · {} g", food::fmt_num(old.round()));
+                match name.strip_suffix(&tail) {
+                    Some(base) => format!("{base} · {} g", food::fmt_num(new.round())),
+                    None => name,
+                }
+            }
+            _ => name,
+        };
         // Changing the amount rescales everything we know about the portion.
         if let (Some(old), Some(new), Some(m)) = (l.grams, grams, l.nut.as_ref()) {
             if old > 0.0 && input.nut.is_none() {
@@ -979,9 +991,9 @@ impl Core {
     }
 
     /// Edit one planned meal; if it was already ticked, its log row follows.
-    pub fn update_plan_meal(&mut self, date: &str, idx: usize, meal: PlanMeal) -> Result<()> {
+    pub fn update_plan_meal(&mut self, date: &str, idx: usize, expect: Option<&str>, meal: PlanMeal) -> Result<()> {
         let mut meals = self.store.get::<Plan>(date).map(|p| p.meals.clone()).ok_or("There's no plan for that day.")?;
-        let old = meals.get(idx).cloned().ok_or("That meal isn't in the plan any more.")?;
+        let old = plan_meal_at(&meals, idx, expect)?.clone();
         meals[idx] = PlanMeal { done: old.done, log_id: old.log_id.clone(), ..meal };
         self.set_plan(date, meals)?;
         if let Some(lid) = old.log_id {
@@ -1047,12 +1059,13 @@ impl Core {
     }
 
     /// Tick or untick a planned meal. Ticking creates a log row; unticking deletes it.
-    pub fn toggle_plan(&mut self, date: &str, idx: usize) -> Result<bool> {
+    pub fn toggle_plan(&mut self, date: &str, idx: usize, expect: Option<&str>) -> Result<bool> {
         check_date(date)?;
         let mut plan = self.store.get::<Plan>(date).cloned().ok_or("There's no plan for that day.")?;
         let hhmm = self.hhmm();
         let now = self.now();
-        let m = plan.meals.get_mut(idx).ok_or("That meal isn't in the plan any more.")?;
+        plan_meal_at(&plan.meals, idx, expect)?;
+        let m = &mut plan.meals[idx];
         let done = if m.done {
             if let Some(lid) = m.log_id.take() {
                 self.store.delete::<Log>(&lid)?;
@@ -2144,11 +2157,9 @@ impl Core {
     }
 
     /// Remove one meal from a day's plan (and its log row if it was ticked).
-    pub fn remove_plan_meal(&mut self, date: &str, idx: usize) -> Result<()> {
+    pub fn remove_plan_meal(&mut self, date: &str, idx: usize, expect: Option<&str>) -> Result<()> {
         let mut meals = self.store.get::<Plan>(date).map(|p| p.meals.clone()).unwrap_or_default();
-        if idx >= meals.len() {
-            return Err("That meal isn't in the plan any more.".into());
-        }
+        plan_meal_at(&meals, idx, expect)?;
         meals.remove(idx);
         self.set_plan(date, meals)
     }
@@ -2574,5 +2585,14 @@ impl Core {
 
     pub fn import_json(&mut self, text: &str) -> Result<usize> {
         crate::backup::import(&mut self.store, text)
+    }
+}
+
+/// The planned meal at `idx`, checked against the name the screen showed, so a second
+/// click (or a stale screen) can't hit the meal that moved into that slot.
+fn plan_meal_at<'a>(meals: &'a [PlanMeal], idx: usize, expect: Option<&str>) -> Result<&'a PlanMeal> {
+    match meals.get(idx) {
+        Some(m) if expect.is_none_or(|n| n == m.name) => Ok(m),
+        _ => Err("That meal isn't in the plan any more.".into()),
     }
 }

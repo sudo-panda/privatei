@@ -146,7 +146,7 @@ function editMeal(d, slot, existing = null) {
           if (!(pr >= 0 && pr <= 500)) return (err.textContent = 'Protein must be between 0 and 500 g.');
           const meal = { slot: s, name: name.value.trim(), kcal: k, prot: pr, fiber: fiber.value === '' ? null : Number(fiber.value), done: false };
           try {
-            if (existing) await quiet('update_plan_meal', { date: d.date, idx: existing.idx, meal });
+            if (existing) await quiet('update_plan_meal', { date: d.date, idx: existing.idx, name: existing.name, meal });
             else await quiet('add_plan_meal', { date: d.date, meal });
           } catch (e) {
             return (err.textContent = message(e));
@@ -156,7 +156,7 @@ function editMeal(d, slot, existing = null) {
         },
       }, existing ? 'Save' : 'Add to plan'),
       existing
-        ? h('button', { type: 'button', class: 'danger', onclick: async () => { await call('remove_plan_meal', { date: d.date, idx: existing.idx }); toast('Removed from the plan'); close(); refresh(); } }, 'Remove from plan')
+        ? h('button', { type: 'button', class: 'danger', onclick: async () => { await call('remove_plan_meal', { date: d.date, idx: existing.idx, name: existing.name }); toast('Removed from the plan'); close(); refresh(); } }, 'Remove from plan')
         : null,
     );
   });

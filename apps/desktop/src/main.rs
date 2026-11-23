@@ -46,8 +46,8 @@ fn update_log(s: State<AppState>, id: String, entry: LogInput) -> R<()> {
 }
 
 #[tauri::command]
-fn update_plan_meal(s: State<AppState>, date: String, idx: usize, meal: PlanMeal) -> R<()> {
-    with(&s, |c| c.update_plan_meal(&date, idx, meal))
+fn update_plan_meal(s: State<AppState>, date: String, idx: usize, name: Option<String>, meal: PlanMeal) -> R<()> {
+    with(&s, |c| c.update_plan_meal(&date, idx, name.as_deref(), meal))
 }
 
 #[tauri::command]
@@ -66,8 +66,8 @@ fn delete_log(s: State<AppState>, id: String) -> R<()> {
 }
 
 #[tauri::command]
-fn toggle_plan(s: State<AppState>, date: String, idx: usize) -> R<bool> {
-    with(&s, |c| c.toggle_plan(&date, idx))
+fn toggle_plan(s: State<AppState>, date: String, idx: usize, name: Option<String>) -> R<bool> {
+    with(&s, |c| c.toggle_plan(&date, idx, name.as_deref()))
 }
 
 #[tauri::command]
@@ -326,8 +326,8 @@ fn add_plan_meal(s: State<AppState>, date: String, meal: PlanMeal) -> R<()> {
 }
 
 #[tauri::command]
-fn remove_plan_meal(s: State<AppState>, date: String, idx: usize) -> R<()> {
-    with(&s, |c| c.remove_plan_meal(&date, idx))
+fn remove_plan_meal(s: State<AppState>, date: String, idx: usize, name: Option<String>) -> R<()> {
+    with(&s, |c| c.remove_plan_meal(&date, idx, name.as_deref()))
 }
 
 #[tauri::command]

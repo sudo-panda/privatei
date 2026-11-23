@@ -518,8 +518,8 @@ const handlers = {
     if (l && db.plan[l.date]) for (const m of db.plan[l.date].meals) if (m.logId === lid) { m.done = false; m.logId = null; }
     delete db.log[lid];
   },
-  toggle_plan: ({ date, idx }) => {
-    const m = db.plan[date].meals[idx];
+  toggle_plan: ({ date, idx, name }) => {
+    const m = planMealAt(date, idx, name);
     if (m.done) { delete db.log[m.logId]; m.done = false; m.logId = null; }
     else { const lid = id(); db.log[lid] = { date, meal: meal(m.slot), name: m.name, grams: null, kcal: m.kcal, prot: m.prot, est: false, ts: db.ts++ }; m.done = true; m.logId = lid; }
     return m.done;
@@ -686,15 +686,17 @@ const handlers = {
     const l = db.log[lid];
     if (!l) throw 'That entry no longer exists.';
     if (!entry.name.trim()) throw 'Give the food a name.';
-    if (!(entry.kcal > 0 && entry.kcal < 5000)) throw 'Calories must be above 0 and below 5000.';
-    Object.assign(l, { name: entry.name.trim(), meal: meal(entry.meal), grams: entry.grams, kcal: Math.round(entry.kcal), prot: r1(entry.prot), fiber: entry.fiber ?? null });
+    if (!(entry.kcal >= 0 && entry.kcal < 5000)) throw 'Calories must be between 0 and 5000.';
+    let nm = entry.name.trim();
+    const tail = ` · ${Math.round(l.grams)} g`;
+    if (l.grams && entry.grams && l.grams !== entry.grams && nm.endsWith(tail)) nm = `${nm.slice(0, -tail.length)} · ${Math.round(entry.grams)} g`;
+    Object.assign(l, { name: nm, meal: meal(entry.meal), grams: entry.grams, kcal: Math.round(entry.kcal), prot: r1(entry.prot), fiber: entry.fiber ?? null });
     const p = db.plan[l.date];
     if (p) for (const m of p.meals) if (m.logId === lid) Object.assign(m, { name: l.name, kcal: l.kcal, prot: l.prot, fiber: l.fiber, slot: l.meal });
   },
-  update_plan_meal: ({ date, idx, meal: m }) => {
+  update_plan_meal: ({ date, idx, name, meal: m }) => {
     const p = db.plan[date];
-    if (!p || !p.meals[idx]) throw "That meal isn't in the plan any more.";
-    const old = p.meals[idx];
+    const old = planMealAt(date, idx, name);
     p.meals[idx] = { ...m, done: old.done, logId: old.logId };
     if (old.logId && db.log[old.logId]) Object.assign(db.log[old.logId], { name: m.name, kcal: m.kcal, prot: m.prot, fiber: m.fiber ?? null, meal: m.slot });
   },
@@ -705,7 +707,7 @@ const handlers = {
     Object.assign(w, { kind, mins, kcal: kcal || burn(kind, mins), name: name || kind[0].toUpperCase() + kind.slice(1) });
   },
   add_plan_meal: ({ date, meal: m }) => { (db.plan[date] ||= { meals: [] }).meals.push({ ...m, done: false, logId: null }); },
-  remove_plan_meal: ({ date, idx }) => { const p = db.plan[date]; if (p) { const [m] = p.meals.splice(idx, 1); if (m?.logId) delete db.log[m.logId]; } },
+  remove_plan_meal: ({ date, idx, name }) => { planMealAt(date, idx, name); const p = db.plan[date]; if (p) { const [m] = p.meals.splice(idx, 1); if (m?.logId) delete db.log[m.logId]; } },
   training_summary: trainingSummary,
   get_settings: () => ({ ...db.settings }),
   save_settings: ({ settings }) => {
@@ -735,9 +737,21 @@ const handlers = {
   import_from: () => 3,
   'plugin:dialog|save': () => '/tmp/privatei-backup.json',
   'plugin:app|version': () => '0.4.0',
-  'plugin:updater|check': () => null,
+  // ?update=0.5.0 pretends a newer version is out; downloading it always fails here.
+  'plugin:updater|check': () => (params.get('update') ? { rid: 1, currentVersion: '0.4.0', version: params.get('update'), date: null, body: '', rawJson: {} } : null),
+  'plugin:updater|download_and_install': () => { throw 'The download was interrupted.'; },
   'plugin:dialog|open': () => '/tmp/privatei-backup.json',
 };
+
+/** Like the core: the meal at idx, checked against the name the screen showed. */
+function planMealAt(date, idx, name) {
+  const m = db.plan[date]?.meals[idx];
+  if (!m || (name != null && m.name !== name)) throw "That meal isn't in the plan any more.";
+  return m;
+}
+
+// ?delay=ms makes every answer slow, like a real disk, to catch double clicks and races.
+const DELAY = Number(params.get('delay') || 0);
 
 export function install() {
   seed();
@@ -746,7 +760,13 @@ export function install() {
     db.calls.push(cmd);
     const fn = handlers[cmd];
     if (!fn) throw `mock: unknown command ${cmd}`;
-    const out = fn(args || {});
-    return out === undefined ? null : JSON.parse(JSON.stringify(out));
+    const answer = () => {
+      const out = fn(args || {});
+      return out === undefined ? null : JSON.parse(JSON.stringify(out));
+    };
+    // Tests can set window.__mockDelay = (cmd, args) => ms to make one answer slower than the next.
+    const ms = window.__mockDelay ? window.__mockDelay(cmd, args || {}) : cmd.startsWith('plugin:') ? 0 : DELAY;
+    if (!ms) return answer();
+    return new Promise((ok, fail) => setTimeout(() => { try { ok(answer()); } catch (e) { fail(e); } }, ms));
   });
 }

@@ -42,9 +42,14 @@ export function openAdd() {
   if (els.addOverlay) els.addOverlay.open('#food-search');
 }
 
+let seq = 0;
+
 async function refresh(o = {}) {
   if (!state.date) state.date = state.today;
+  // Clicking days quickly: only the answer for the last click is drawn.
+  const my = ++seq;
   const [d] = await Promise.all([call('get_day', { date: state.date }), opts.addPanel ? opts.addPanel.refresh(o) : null]);
+  if (my !== seq) return;
   day = d;
   render();
   if (opts.strip) renderStrip();
@@ -68,7 +73,7 @@ function renderStrip() {
       'data-date': x,
       'aria-pressed': String(x === d.date),
       'aria-label': isToday ? 'Today' : dayLabel(x, d.today),
-      onclick: () => setDate(x),
+      onclick: () => { setDate(x); },
     },
     h('span', { class: 'strip-dow', text: isToday ? 'Today' : dd === 1 ? MON[m - 1] : L[dow] }),
     h('b', { class: 'num', text: String(dd) }));
@@ -84,10 +89,10 @@ function renderStrip() {
   fill(
     els.nav,
     h('div', { class: 'strip-bar' },
-      iconButton('left', 'Previous day', () => setDate(shift(d.date, -1)), 'icon'),
+      iconButton('left', 'Previous day', () => { setDate(shift(state.date, -1)); }, 'icon'),
       track,
       dayBtn(d.today, true),
-      h('button', { class: 'icon', type: 'button', 'aria-label': 'Next day', title: 'Next day', disabled: d.isToday, onclick: () => setDate(shift(d.date, 1)) }, icon('right'))),
+      h('button', { class: 'icon', type: 'button', 'aria-label': 'Next day', title: 'Next day', disabled: d.isToday, onclick: () => { if (state.date < state.today) setDate(shift(state.date, 1)); } }, icon('right'))),
   );
   // Keep the bar where it was; scroll only if the selected day is out of view.
   const ref = anchor && track.querySelector(`[data-date="${anchor.date}"]`);
@@ -134,9 +139,9 @@ function render() {
     h(
       'div',
       { class: 'row spread' },
-      iconButton('left', 'Previous day', () => setDate(shift(d.date, -1)), 'icon'),
+      iconButton('left', 'Previous day', () => { setDate(shift(state.date, -1)); }, 'icon'),
       h('div', { class: 'grow', style: 'text-align:center' }, h('h2', { id: 'day-label', text: dayLabel(d.date, d.today) }), d.isToday ? null : h('div', { class: 'small muted', text: d.date })),
-      h('button', { class: 'icon', type: 'button', 'aria-label': 'Next day', title: 'Next day', disabled: d.isToday, onclick: () => setDate(shift(d.date, 1)) }, icon('right')),
+      h('button', { class: 'icon', type: 'button', 'aria-label': 'Next day', title: 'Next day', disabled: d.isToday, onclick: () => { if (state.date < state.today) setDate(shift(state.date, 1)); } }, icon('right')),
     ),
     d.isToday ? null : h('button', { type: 'button', class: 'block', onclick: () => setDate(d.today) }, 'Back to today'),
   );
@@ -195,7 +200,7 @@ function render() {
             'aria-label': `Ate ${m.name}`,
             onchange: async () => {
               try {
-                await call('toggle_plan', { date: d.date, idx: m.idx });
+                await call('toggle_plan', { date: d.date, idx: m.idx, name: m.name });
               } finally {
                 refresh();
               }
@@ -314,8 +319,7 @@ function render() {
 }
 
 /** Add a session, or edit `w` ({ id, kind, mins, kcal, name }) with Save and Delete. */
-export function openTraining(w = null) {
-  const date = state.date;
+export function openTraining(w = null, date = state.date) {
   openSheet(w ? 'Edit training' : 'Add training', (body, close) => {
     let kind = w ? w.kind : 'gym';
     const mins = h('input', { type: 'number', inputmode: 'numeric', min: 1, max: 1440, id: 'tr-mins', 'aria-label': 'Minutes', value: w ? w.mins : '' });
@@ -405,6 +409,9 @@ export function openFoodEditor(r) {
       kcal.value = Math.round(base.kcal * f);
       prot.value = Math.round(base.prot * f * 10) / 10;
       if (base.fiber != null) fiber.value = Math.round(base.fiber * f * 10) / 10;
+      // "Skyr · 200 g" follows the new amount (the core does the same when it saves).
+      const m = name.value.match(/^(.*) · (\d+(?:\.\d+)?) g$/);
+      if (m) name.value = `${m[1]} · ${Math.round(g)} g`;
     });
     body.append(
       h('label', { class: 'field' }, 'Name', name),
@@ -422,7 +429,7 @@ export function openFoodEditor(r) {
             err.textContent = '';
             const k = Number(kcal.value), p = Number(prot.value || 0);
             if (!name.value.trim()) return (err.textContent = 'Give the food a name.');
-            if (!(k > 0 && k < 5000)) return (err.textContent = 'kcal must be above 0 and below 5000.');
+            if (!(kcal.value !== '' && k >= 0 && k < 5000)) return (err.textContent = 'kcal must be between 0 and 5000.');
             if (!(p >= 0 && p <= 500)) return (err.textContent = 'Protein must be between 0 and 500 g.');
             try {
               await quiet('update_log', { id: r.id, entry: { meal, name: name.value.trim(), grams: grams.value === '' ? null : Number(grams.value), kcal: k, prot: p, est: r.est, fiber: fiber.value === '' ? null : Number(fiber.value) } });

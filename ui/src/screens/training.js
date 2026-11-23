@@ -16,7 +16,7 @@ export function trainingPanel() {
       root.append(
         h('div', { class: 'card', 'aria-label': 'Training log' },
           h('div', { class: 'card-head' }, h('h2', { text: 'Training log' }),
-            h('button', { type: 'button', class: 'ghost', onclick: () => { state.date = state.today; openTraining(); } }, 'Add training')),
+            h('button', { type: 'button', class: 'ghost', onclick: () => openTraining(null, state.today) }, 'Add training')),
           list),
       );
     },

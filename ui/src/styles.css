@@ -197,6 +197,9 @@ input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent);
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 details > summary { cursor: pointer; list-style: none; }
 details > summary::-webkit-details-marker { display: none; }
+/* A chevron that turns when open, so a closed <details> doesn't look like an empty card. */
+details > summary::before { content: ''; display: inline-block; width: 7px; height: 7px; margin: 0 10px 2px 2px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform 0.15s; }
+details[open] > summary::before { transform: rotate(45deg); }
 
 @media (max-width: 400px) {
   main { padding: 4px 8px 20px; }
@@ -396,6 +399,8 @@ details > summary::-webkit-details-marker { display: none; }
 /* ---------- Food search ---------- */
 .food-search { display: flex; flex-direction: column; gap: 8px; }
 .food-results { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; max-height: 340px; overflow-y: auto; }
+/* In a capped flex column the rows would shrink and draw over each other. */
+.food-results > * { flex-shrink: 0; }
 .food-hit { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; text-align: left; border: 0; border-radius: 0; border-top: 1px solid var(--line); background: transparent; font-weight: 400; min-height: 44px; }
 .food-hit:first-child { border-top: 0; }
 .food-hit:hover, .food-hit:focus-visible { background: var(--soft); }
@@ -446,9 +451,11 @@ details > summary::-webkit-details-marker { display: none; }
 .strip-track.more-left.more-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); mask-image: linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); }
 .small-btn { min-height: 26px; padding: 2px 8px; font-size: 12px; color: var(--accent); }
 
-/* Add food is always a centred panel, whatever the window width. */
-.overlay-backdrop { align-items: center; padding: 16px; }
-.overlay-sheet { border-radius: 16px; max-height: calc(100vh - 32px); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
+/* Add food is a panel anchored near the top: it doesn't jump as results come and go,
+   and it scrolls inside instead of growing past the window. */
+.overlay-backdrop { align-items: flex-start; padding: max(16px, 6vh) 16px 16px; }
+.overlay-sheet { border-radius: 16px; max-height: calc(100vh - max(16px, 6vh) - 16px); max-height: calc(100dvh - max(16px, 6vh) - 16px); overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
+input[aria-invalid="true"] { border-color: var(--over); }
 
 /* ---------- Log: compact energy / protein / fiber ---------- */
 .macro { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: baseline; column-gap: 10px; row-gap: 4px; }
