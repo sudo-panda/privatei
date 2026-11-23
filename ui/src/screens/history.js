@@ -1,6 +1,6 @@
 import { h, fill, n0, n1, dayLabel } from '../dom.js';
 import { call } from '../api.js';
-import { state, go } from '../state.js';
+import { state } from '../state.js';
 import { barChart, pctBars } from '../charts.js';
 
 let els = {};
@@ -84,39 +84,15 @@ async function refresh() {
     data: days.map((d) => ({ label: short(d.date), v: d.mins, tone: 'train', tip: `${dayLabel(d.date, state.today)}: ${d.mins ? `${n0(d.mins)} min` : 'no training'}` })),
   });
 
-  const groups = ['Carbs', 'Fats', 'Vitamins', 'Minerals', 'Other'];
-  const known = s.nutrients.filter((m) => m.pct !== null && m.kind !== 'info' && m.key !== 'fiber');
-  const nutrients = known.length
-    ? h('div', { class: 'nut-groups' }, groups.map((g) => {
-        const rows = known.filter((m) => m.group === g);
-        if (!rows.length) return null;
-        return h('div', { class: 'nut-group' }, h('h3', { text: g }),
-          pctBars(rows.map((m) => ({
-            label: m.label,
-            value: m.pct,
-            text: `${m.coverage < 0.8 ? '≈' : ''}${n0(m.pct)}% · ${n1(m.amount)} ${m.unit}`,
-            tone: m.kind === 'limit' ? (m.pct > 100 ? 'short' : m.pct > 80 ? 'mid' : 'ok') : m.pct < 60 ? 'short' : m.pct < 100 ? 'mid' : 'ok',
-          })), { title: g }));
-      }))
-    : h('p', { class: 'muted small', text: 'No nutrient data yet. Foods you add from the food database carry 30–40 nutrients each.' });
+  const nutrients = nutrientGroups(s.nutrients, 'No nutrient data yet. Foods you add from the food database carry 30–40 nutrients each.');
 
   const meds = hist.meds.length
     ? pctBars(hist.meds.map((m) => ({ label: m.name, value: m.due ? (m.taken / m.due) * 100 : 0, text: `${m.taken}/${m.due}`, tone: m.missed === 0 ? 'ok' : m.missed * 5 > m.due ? 'short' : 'mid' })), { max: 100, title: 'Medicines taken' })
     : h('p', { class: 'muted small', text: 'No medicines due in this period.' });
 
   const dayList = h('details', { class: 'card' },
-    h('summary', {}, h('b', { text: 'Day by day' }), h('span', { class: 'small muted', text: ' · tap a day to open it in Log' })),
-    h('div', { class: 'list' }, hist.days.map((d) =>
-      h('button', {
-        type: 'button', class: 'item ghost day-row', style: 'text-align:left;border-radius:0;min-height:40px', 'data-hist': d.date,
-        // The label is all a screen reader hears, so it carries the numbers too.
-        'aria-label': [`Open ${dayLabel(d.date, state.today)} in Log`, `${n0(d.kcal)} kcal`, `${n1(d.prot)} g protein`, d.fiber === null ? null : `${n1(d.fiber)} g fiber`, d.mins ? `${n0(d.mins)} min trained` : null, d.due ? `meds ${d.taken} of ${d.due}` : null].filter(Boolean).join(', '),
-        onclick: () => { state.date = d.date; go('today'); },
-      },
-      h('span', { class: 'name' }, h('b', { text: dayLabel(d.date, state.today) }), h('div', { class: 'meta', text: [d.mins ? `${n0(d.mins)} min trained` : null, d.due ? `meds ${d.taken}/${d.due}` : null].filter(Boolean).join(' · ') })),
-      h('span', { class: `num small ${d.over ? 'error' : ''}`, text: `${n0(d.kcal)} kcal` }),
-      h('span', { class: `num small ${d.protMet ? 'ok' : 'muted'}`, text: `${n1(d.prot)} g` }),
-      h('span', { class: `num small ${d.fiberMet ? 'ok' : 'muted'}`, text: d.fiber === null ? '—' : `${n1(d.fiber)} g fiber` })))));
+    h('summary', {}, h('b', { text: 'Day by day' }), h('span', { class: 'small muted', text: ' · tap a day to see all its nutrients' })),
+    h('div', { class: 'list' }, hist.days.map(dayRow)));
 
   fill(
     els.body,
@@ -130,6 +106,50 @@ async function refresh() {
         chartCard('Training', 'minutes per day', train))),
     dayList,
   );
+}
+
+/** Nutrient bars by group (target, limit), as % of the daily reference. Fiber has its own chart. */
+function nutrientGroups(list, empty) {
+  const groups = ['Carbs', 'Fats', 'Vitamins', 'Minerals', 'Other'];
+  const known = list.filter((m) => m.pct !== null && m.kind !== 'info' && m.key !== 'fiber');
+  if (!known.length) return h('p', { class: 'muted small', text: empty });
+  return h('div', { class: 'nut-groups' }, groups.map((g) => {
+    const rows = known.filter((m) => m.group === g);
+    if (!rows.length) return null;
+    return h('div', { class: 'nut-group' }, h('h3', { text: g }),
+      pctBars(rows.map((m) => ({
+        label: m.label,
+        value: m.pct,
+        text: `${m.coverage < 0.8 ? '≈' : ''}${n0(m.pct)}% · ${n1(m.amount)} ${m.unit}`,
+        tone: m.kind === 'limit' ? (m.pct > 100 ? 'short' : m.pct > 80 ? 'mid' : 'ok') : m.pct < 60 ? 'short' : m.pct < 100 ? 'mid' : 'ok',
+      })), { title: g }));
+  }));
+}
+
+/** One day: its totals, and tapping it opens that day's nutrients right underneath. */
+function dayRow(d) {
+  const panel = h('div', { class: 'day-nutrients hidden', id: `day-nut-${d.date}`, role: 'region', 'aria-label': `Nutrients on ${dayLabel(d.date, state.today)}` });
+  let loaded = false;
+  const btn = h('button', {
+    type: 'button', class: 'item ghost day-row', 'data-hist': d.date, 'aria-expanded': 'false', 'aria-controls': panel.id,
+    // The label is all a screen reader hears, so it carries the numbers too.
+    'aria-label': [dayLabel(d.date, state.today), `${n0(d.kcal)} kcal`, `${n1(d.prot)} g protein`, d.fiber === null ? null : `${n1(d.fiber)} g fiber`, d.mins ? `${n0(d.mins)} min trained` : null, d.due ? `meds ${d.taken} of ${d.due}` : null].filter(Boolean).join(', '),
+    onclick: async () => {
+      const open = panel.classList.toggle('hidden') === false;
+      btn.setAttribute('aria-expanded', String(open));
+      if (!open || loaded) return;
+      fill(panel, h('p', { class: 'small muted', text: 'Loading…' }));
+      const day = await call('get_day', { date: d.date });
+      loaded = true;
+      fill(panel, nutrientGroups(day.nutrients, 'No nutrient data for this day. Foods from the food database carry 30–40 nutrients each; typed-in numbers only have calories, protein and fiber.'));
+    },
+  },
+  h('span', { class: 'day-chevron', 'aria-hidden': 'true' }),
+  h('span', { class: 'name' }, h('b', { text: dayLabel(d.date, state.today) }), h('div', { class: 'meta', text: [d.mins ? `${n0(d.mins)} min trained` : null, d.due ? `meds ${d.taken}/${d.due}` : null].filter(Boolean).join(' · ') })),
+  h('span', { class: `num small ${d.over ? 'error' : ''}`, text: `${n0(d.kcal)} kcal` }),
+  h('span', { class: `num small ${d.protMet ? 'ok' : 'muted'}`, text: `${n1(d.prot)} g` }),
+  h('span', { class: `num small ${d.fiberMet ? 'ok' : 'muted'}`, text: d.fiber === null ? '—' : `${n1(d.fiber)} g fiber` }));
+  return h('div', { class: 'day-entry' }, btn, panel);
 }
 
 export default { id: 'history', title: 'History', icon: 'chart', mount, refresh };

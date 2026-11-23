@@ -734,9 +734,14 @@ test('A double click saves once: add food, plan meal, training', async ({ page }
   await page.locator('.food-picked').getByRole('button', { name: 'Add to log' }).dblclick();
   await expect(page.locator('.food-picked')).toBeHidden();
   expect(await calls('add_food')).toBe(1);
-  await page.keyboard.press('Escape');
+  // Adding closes the panel and redraws the Log (slowly here): wait for it, so the next
+  // click doesn't land on a button that's about to be replaced.
+  await expect(page.locator('.overlay-backdrop')).toBeHidden();
+  await expect(page.locator('[aria-label="Food logged"]')).toContainText(/lentil/i);
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Add training' }).click();
+  await expect(page.locator('#tr-mins')).toBeVisible();
   await page.locator('#tr-mins').fill('30');
   await page.getByRole('button', { name: 'Save training' }).dblclick();
   await expect(page.locator('.backdrop:not(.hidden) .sheet')).toHaveCount(0);
@@ -1030,4 +1035,27 @@ test('Desktop sidebar shows the app icon beside the name at the bottom; narrow s
   await expect(page.locator('nav.tabs .brand span')).toBeHidden();
   await page.setViewportSize({ width: 375, height: 800 });
   await expect(icon).toBeHidden();
+});
+
+test('History "Day by day": a day opens its nutrients in place, not the Log', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=rich&layout=new&hhmm=20:00');
+  await tab(page, 'history').click();
+  await page.locator('details > summary', { hasText: 'Day by day' }).click();
+  const row = page.locator('.day-row').first();
+  await expect(row).toHaveAttribute('aria-expanded', 'false');
+  await row.click();
+  await expect(page.locator('#title')).toHaveText('History'); // stayed here
+  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  const panel = page.locator('.day-nutrients').first();
+  await expect(panel.locator('.nut-group h3').first()).toBeVisible();
+  await expect(panel.locator('.pct-row').first()).toContainText('%');
+  expect(await panel.locator('.pct-row').count()).toBeGreaterThan(5);
+  await row.click();
+  await expect(panel).toBeHidden();
+  await expect(row).toHaveAttribute('aria-expanded', 'false');
+  // A day with only typed-in numbers says so instead of showing empty bars.
+  const typed = page.locator('.day-row', { hasText: /kcal/ }).last();
+  await typed.click();
+  await expect(page.locator('.day-nutrients:not(.hidden)')).toBeVisible();
 });

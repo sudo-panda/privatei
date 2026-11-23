@@ -518,3 +518,11 @@ input[aria-invalid="true"] { border-color: var(--over); }
 @media (min-width: 760px) and (max-width: 999px) {
   #screen-training > .screen { max-width: 720px; }
 }
+
+/* History "Day by day": a row opens that day's nutrients right under it. */
+.day-entry { border-top: 1px solid var(--line); }
+.day-entry:first-child { border-top: 0; }
+.list > .day-entry > .day-row { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; border-radius: 0; min-height: 40px; padding: 8px 0; }
+.day-chevron { width: 7px; height: 7px; flex: none; margin: 0 4px 0 2px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform 0.15s; }
+.day-row[aria-expanded="true"] .day-chevron { transform: rotate(45deg); }
+.day-nutrients { padding: 4px 0 14px 18px; }
