@@ -66,6 +66,16 @@ fn delete_log(s: State<AppState>, id: String) -> R<()> {
 }
 
 #[tauri::command]
+fn set_shop_day(s: State<AppState>, date: String, trip: Option<u8>) -> R<()> {
+    with(&s, |c| c.set_shop_day(&date, trip))
+}
+
+#[tauri::command]
+fn plan_food(s: State<AppState>, date: String, slot: String, reference: String, grams: f64) -> R<()> {
+    with(&s, |c| c.plan_food(&date, &slot, &reference, grams))
+}
+
+#[tauri::command]
 fn set_sleep(s: State<AppState>, date: String, bed: String, wake: String) -> R<()> {
     with(&s, |c| c.set_sleep(&date, &bed, &wake))
 }
@@ -467,6 +477,8 @@ fn main() {
             delete_log,
             toggle_plan,
             set_sleep,
+            set_shop_day,
+            plan_food,
             clear_sleep,
             set_plan,
             copy_yesterday,

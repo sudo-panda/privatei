@@ -28,7 +28,8 @@ function mount(root, o = {}) {
   els.meds = h('div', { class: 'card hidden', 'aria-label': 'Medicines' });
   els.training = h('div', { class: 'card', 'aria-label': 'Training' });
   els.sleep = sleepCard();
-  root.append(h('div', { class: 'cols log-cols' }, h('div', { class: 'col' }, els.strip, els.nav, els.energy, els.sleep, els.plan, els.meds), h('div', { class: 'col' }, els.food, els.training)));
+  els.shop = h('div', { class: 'card shop-tile shop-today hidden', 'aria-label': 'Shopping today' });
+  root.append(h('div', { class: 'cols log-cols' }, h('div', { class: 'col' }, els.strip, els.nav, els.energy, els.shop, els.sleep, els.plan, els.meds), h('div', { class: 'col' }, els.food, els.training)));
   if (opts.addPanel) {
     // Adding food happens in an overlay, so the Log stays a clean record of the day.
     els.addOverlay = overlay('Add food');
@@ -319,6 +320,18 @@ function render() {
       : h('p', { class: 'muted', text: 'No training logged.' }),
   );
   els.sleep.show(d);
+
+  // A planned shopping day, on the day itself: straight to the list.
+  const shop = d.isToday && d.shop;
+  els.shop.classList.toggle('hidden', !shop);
+  if (shop) {
+    fill(els.shop,
+      h('span', { class: 'shop-tile-icon', 'aria-hidden': 'true' }, icon('shop')),
+      h('span', { class: 'name' },
+        h('b', { text: `Shopping today · Trip ${shop.trip}` }),
+        h('div', { class: 'meta', text: shop.items ? `${shop.items} item${shop.items === 1 ? '' : 's'} to buy${shop.cost ? ` · CHF ${shop.cost.toFixed(2)}` : ''}` : 'The list is empty' })),
+      h('button', { type: 'button', class: 'primary small-btn', onclick: () => go('kitchen', { part: 'Shopping', trip: shop.trip }) }, 'Open list'));
+  }
 }
 
 /** "7 h 30 min" from minutes. */

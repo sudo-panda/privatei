@@ -141,6 +141,9 @@ pub struct PlanMeal {
 #[serde(rename_all = "camelCase", default)]
 pub struct Plan {
     pub meals: Vec<PlanMeal>,
+    /// A shopping day: which trip (1 or 2) you'll shop for. None = not a shopping day.
+    #[serde(deserialize_with = "lenient::opt_u8", skip_serializing_if = "Option::is_none")]
+    pub shop: Option<u8>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

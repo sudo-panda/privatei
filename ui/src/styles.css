@@ -532,3 +532,17 @@ input[aria-invalid="true"] { border-color: var(--over); }
 .sleep-card .card-head { margin-bottom: 4px; }
 .sleep-card input[type="time"] { font-family: var(--f-num); }
 .day-sleep { margin: 0 0 10px; }
+
+/* Planned shopping day: on a Plan day card, and on the Log when the day comes. */
+.shop-tile { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.card.shop-tile { padding: 12px 16px; }
+.shop-tile .name { flex: 1; min-width: 0; }
+.shop-tile-icon { color: var(--accent); display: inline-flex; }
+.shop-tile-icon svg { width: 22px; height: 22px; }
+.shop-tile .small-btn { min-height: 32px; padding: 4px 12px; font-size: 13px; }
+.shop-tile .small-btn.primary { color: var(--on-accent); }
+.plan-shop-add { align-self: flex-start; margin-top: auto; color: var(--muted); }
+.plan-shop-add svg { width: 16px; height: 16px; }
+.plan-day { display: flex; flex-direction: column; gap: 10px; }
+.plan-day-chips .chip { font-size: 13px; }
+.plan-add .small-btn { align-self: flex-start; }

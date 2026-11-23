@@ -1,6 +1,6 @@
-import { h, fill, iconButton, toast, openSheet, n0, n1, dayLabel, chipGroup } from '../dom.js';
+import { h, fill, icon, iconButton, toast, openSheet, overlay, n0, n1, dayLabel, chipGroup } from '../dom.js';
 import { call, quiet, message } from '../api.js';
-import { state } from '../state.js';
+import { state, go } from '../state.js';
 import { planPanel } from './week.js';
 import { foodSearch } from '../foodsearch.js';
 
@@ -20,6 +20,75 @@ function mount(root) {
   els.board = h('div', { class: 'plan-board' });
   els.earlier = h('div', { class: 'hidden' });
   root.append(els.head, els.board, els.earlier);
+  // Like Add food on the Log: one panel to fill the coming days from the food databases.
+  els.addOverlay = overlay('Add to plan');
+  els.addOverlay.body.append(addPanel());
+  root.classList.add('has-fab');
+  root.append(h('button', { type: 'button', class: 'fab', id: 'open-plan-add', 'aria-label': 'Add food to the plan', title: 'Add food to the plan', onclick: () => openAddToPlan() }, icon('add')));
+}
+
+/** Open the Add to plan panel, on `date` if given. */
+export async function openAddToPlan(date = null) {
+  await els.addPanel.load(date);
+  els.addOverlay.open('#plan-search');
+}
+
+/**
+ * Search foods and recipes and add them to a day and meal of the next two weeks.
+ * The panel stays open after each add, so a whole week can be filled in one go.
+ */
+function addPanel() {
+  let days = [];
+  let date = null;
+  let slot = 'Lunch';
+  const dayChips = h('div', { class: 'chips plan-day-chips', role: 'group', 'aria-label': 'Day' });
+  const summary = h('div', { class: 'small muted', 'data-testid': 'plan-add-day' });
+  const status = h('div', { class: 'small ok', role: 'status' });
+  const firstOpenSlot = () => days.find((d) => d.date === date)?.emptySlots[0] || slot;
+  const showDay = () => {
+    for (const b of dayChips.children) b.setAttribute('aria-pressed', String(b.dataset.v === date));
+    const d = days.find((x) => x.date === date);
+    summary.textContent = d ? (d.meals.length ? `${title(d)}: ${d.meals.length} planned · ${n0(d.kcal)} kcal${d.emptySlots.length ? ` · still open: ${d.emptySlots.join(', ')}` : ''}` : `${title(d)}: nothing planned yet`) : '';
+  };
+  const search = foodSearch({
+    id: 'plan-search',
+    meal: () => (slot = firstOpenSlot()),
+    confirmLabel: 'Add to plan',
+    onPick: async (f, g, meal) => {
+      try {
+        await quiet('plan_food', { date, slot: meal || slot, reference: f.ref, grams: g });
+      } catch (e) {
+        toast(message(e), 'error');
+        return false;
+      }
+      const d = days.find((x) => x.date === date);
+      status.textContent = `Added ${f.name} to ${d ? title(d) : date} · ${meal || slot}`;
+      refresh(); // also reloads this panel's day summary
+      return true;
+    },
+  });
+  const typeIt = h('button', { type: 'button', class: 'ghost small-btn', onclick: () => {
+    const d = days.find((x) => x.date === date);
+    if (d) editMeal(d, firstOpenSlot());
+  } }, 'Type a meal yourself');
+  const panel = h('div', { class: 'stack plan-add' },
+    h('div', { class: 'field' }, h('span', { text: 'Day' }), dayChips),
+    summary,
+    search,
+    status,
+    typeIt);
+  panel.load = async (want) => {
+    const p = await call('get_plan_ahead', { days: 14 });
+    days = p.days;
+    // The day you asked for, else the one already picked, else the first with a gap.
+    date = want || (days.some((d) => d.date === date) ? date : (days.find((d) => d.offset > 0 && d.emptySlots.length) || days[0]).date);
+    fill(dayChips, days.map((d) => h('button', { type: 'button', class: 'chip', 'data-v': d.date, 'aria-pressed': String(d.date === date),
+      onclick: () => { date = d.date; status.textContent = ''; showDay(); } },
+      d.offset === 0 ? 'Today' : d.offset === 1 ? 'Tomorrow' : dayLabel(d.date, ''))));
+    showDay();
+  };
+  els.addPanel = panel;
+  return panel;
 }
 
 async function refresh() {
@@ -52,6 +121,7 @@ async function refresh() {
         p.hasEarlier ? h('button', { type: 'button', class: 'ghost', onclick: toggleEarlier }, els.earlier.classList.contains('hidden') ? 'Earlier days' : 'Hide earlier days') : null)),
   );
   fill(els.board, p.days.map((d) => dayCard(d, p)));
+  if (els.addOverlay?.isOpen()) els.addPanel.load();
   if (!els.earlier.classList.contains('hidden') && earlier) await earlier.refresh();
 }
 
@@ -80,6 +150,7 @@ function dayCard(d, p) {
             h('span', { class: d.protMet ? 'ok' : '', text: `${n1(d.prot)} g protein` }),
             h('span', { text: `${n1(d.fiber)} g fiber` })))
       : null,
+    d.shop ? shopTile(d) : null,
     h('div', { class: 'plan-slots' }, SLOTS.map((slot) => {
       const meals = d.meals.filter((m) => m.slot === slot);
       return h('div', { class: 'plan-slot' },
@@ -91,7 +162,38 @@ function dayCard(d, p) {
           h('span', { class: 'num small muted', text: `${n0(m.kcal)} kcal · ${n1(m.prot)} g` }),
           h('span', { class: 'edit-hint', 'aria-hidden': 'true', text: 'Edit' }))));
     })),
+    // Not a shopping day yet: a quiet button at the foot of the card.
+    d.shop ? null : h('button', { type: 'button', class: 'ghost small-btn plan-shop-add', 'aria-label': `Make ${title(d)} a shopping day`, onclick: () => pickTrip(d) }, icon('shop'), 'Shopping day'),
   );
+}
+
+/** A planned shopping day: the trip, what's left to buy, and a way to open it. */
+function shopTile(d) {
+  const s = d.shop;
+  return h('div', { class: 'shop-tile', 'data-shop-day': d.date },
+    h('span', { class: 'shop-tile-icon', 'aria-hidden': 'true' }, icon('shop')),
+    h('span', { class: 'name' },
+      h('b', { text: `Shopping · Trip ${s.trip}` }),
+      h('div', { class: 'meta', text: s.items ? `${s.items} item${s.items === 1 ? '' : 's'} to buy${s.cost ? ` · CHF ${s.cost.toFixed(2)}` : ''}` : 'List is empty' })),
+    h('button', { type: 'button', class: 'small-btn', onclick: () => go('kitchen', { part: 'Shopping', trip: s.trip }) }, 'Open trip'),
+    iconButton('close', `No shopping on ${title(d)}`, async () => { await call('set_shop_day', { date: d.date, trip: null }); refresh(); }));
+}
+
+/** Which trip are you shopping for on this day? */
+function pickTrip(d) {
+  openSheet(`Shopping on ${title(d)}`, (body, close) => {
+    const pick = async (trip) => {
+      await call('set_shop_day', { date: d.date, trip });
+      toast(`${title(d)} is a shopping day`);
+      close();
+      refresh();
+    };
+    body.append(
+      h('p', { class: 'small muted', text: 'Which list are you shopping for? The day shows it on the Plan, and on the Log when the day comes.' }),
+      h('div', { class: 'actions' },
+        h('button', { type: 'button', onclick: () => pick(1) }, 'Trip 1'),
+        h('button', { type: 'button', onclick: () => pick(2) }, 'Trip 2')));
+  });
 }
 
 /** Add a meal to a slot, or edit/delete `existing`. */

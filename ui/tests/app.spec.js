@@ -1102,3 +1102,56 @@ test('Sleep in History: average tile, nightly chart, and on each day', async ({ 
   await row.click();
   await expect(page.locator('.day-nutrients:not(.hidden) .day-sleep')).toContainText(/in bed \d\d:\d\d, up \d\d:\d\d/);
 });
+
+test('Plan: the floating + adds foods to any day of the next two weeks', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new&hhmm=12:00');
+  await tab(page, 'plan').click();
+  await page.locator('#open-plan-add').click();
+  const panel = page.locator('.overlay-sheet', { has: page.locator('#plan-search') });
+  await expect(panel.locator('.plan-day-chips .chip')).toHaveCount(14);
+  await panel.locator('.plan-day-chips .chip[data-v="2026-11-28"]').click();
+  await expect(page.getByTestId('plan-add-day')).toContainText('nothing planned yet');
+  await page.locator('#plan-search').fill('lentils');
+  await panel.locator('.food-hit').first().click();
+  await panel.locator('.food-picked .chip[data-v="Dinner"]').click();
+  await page.locator('#plan-search-grams').fill('150');
+  await panel.getByRole('button', { name: 'Add to plan' }).click();
+  await expect(panel.locator('[role="status"]').last()).toContainText('· Dinner');
+  await expect(page.getByTestId('plan-add-day')).toContainText('1 planned');
+  // The panel stays open for the next one; the board behind it already shows the meal.
+  await expect(page.locator('#plan-search')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '14 days' }).click();
+  await expect(page.locator('[data-plan-day="2026-11-28"]')).toContainText('· 150 g');
+});
+
+test('Plan: a shopping day shows its trip with Open trip; the Log shows Open list on the day', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=rich&layout=new&hhmm=09:00');
+  await tab(page, 'plan').click();
+  // The seed has Trip 1 on the day after tomorrow.
+  const tile = page.locator('[data-shop-day="2026-11-24"]');
+  await expect(tile).toContainText('Shopping · Trip 1');
+  await expect(tile).toContainText(/\d+ items to buy · CHF \d+\.\d\d/);
+  // Make today a Trip 2 day.
+  await page.getByLabel('Make Today a shopping day').click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Trip 2' }).click();
+  await expect(page.locator('[data-shop-day="2026-11-22"]')).toContainText('Trip 2');
+  await page.locator('[data-shop-day="2026-11-22"]').getByRole('button', { name: 'Open trip' }).click();
+  await expect(page.locator('#title')).toHaveText('Kitchen');
+  await expect(page.locator('[data-part="Shopping"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-trip="2"]')).toHaveAttribute('aria-pressed', 'true');
+  // On the Log, today: Shopping today with Open list.
+  await tab(page, 'today').click();
+  const today = page.locator('.card[aria-label="Shopping today"]');
+  await expect(today).toContainText('Shopping today · Trip 2');
+  await today.getByRole('button', { name: 'Open list' }).click();
+  await expect(page.locator('[data-trip="2"]')).toHaveAttribute('aria-pressed', 'true');
+  // Another day on the Log doesn't show it; clearing the day removes it.
+  await tab(page, 'plan').click();
+  await page.getByLabel('No shopping on Today').click();
+  await expect(page.locator('[data-shop-day="2026-11-22"]')).toHaveCount(0);
+  await tab(page, 'today').click();
+  await expect(page.locator('.card[aria-label="Shopping today"]')).toBeHidden();
+});

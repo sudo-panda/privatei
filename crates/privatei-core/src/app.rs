@@ -130,6 +130,8 @@ pub struct DayView {
     pub meals: Vec<MealGroup>,
     pub meds: Vec<DoseView>,
     pub workouts: Vec<WorkoutRow>,
+    /// Set when this day is a planned shopping day.
+    pub shop: Option<ShopDay>,
     /// Last night: the sleep that ended on this date.
     pub sleep: Option<SleepView>,
     pub can_copy_yesterday: bool,
@@ -558,6 +560,19 @@ pub struct PlanAheadDay {
     pub prot_met: bool,
     /// Slots (Breakfast/Lunch/Snack/Dinner) with nothing planned.
     pub empty_slots: Vec<String>,
+    /// Set when this is a planned shopping day.
+    pub shop: Option<ShopDay>,
+}
+
+/// A planned shopping day: which trip, and what's still to buy on it.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ShopDay {
+    pub trip: u8,
+    /// Items on that trip's list not yet ticked.
+    pub items: usize,
+    /// Their known prices added up (CHF).
+    pub cost: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -917,6 +932,7 @@ impl Core {
                 .into_iter()
                 .map(|(id, w)| WorkoutRow { id: id.clone(), kind: w.kind.clone(), mins: w.mins, kcal: w.kcal, name: w.name.clone() })
                 .collect(),
+            shop: self.shop_day(date),
             sleep: self.store.get::<Sleep>(date).and_then(sleep::view),
             can_copy_yesterday: own_rows == 0 && y_rows > 0,
         })
@@ -1171,7 +1187,7 @@ impl Core {
                 Some(m)
             })
             .collect();
-        self.store.put(date, Plan { meals })
+        self.store.put(date, Plan { meals, shop: old.shop })
     }
 
     /// Copy the previous day's own (non-plan) log rows when this day has none.
@@ -2167,6 +2183,7 @@ impl Core {
                 n += 1;
             }
             let empty_slots = MEALS.iter().filter(|slot| !meals.iter().any(|m| m.slot == **slot)).map(|s| s.to_string()).collect();
+            let shop = self.shop_day(&d);
             out.push(PlanAheadDay {
                 dow: dates::weekday(&d),
                 is_today: i == 0,
@@ -2179,6 +2196,7 @@ impl Core {
                 prot: round1(prot),
                 fiber: round1(fiber),
                 empty_slots,
+                shop,
             });
         }
         let has_earlier = self.store.all::<Plan>().any(|(d, p)| !p.meals.is_empty() && dates::days_between(d, &today) > 0);
@@ -2192,6 +2210,53 @@ impl Core {
             avg_prot: if n > 0 { round1(sp / n as f64) } else { 0.0 },
             has_earlier,
         }
+    }
+
+    /// Mark `date` as the day you shop for `trip` (1 or 2), or clear it with None.
+    pub fn set_shop_day(&mut self, date: &str, trip: Option<u8>) -> Result<()> {
+        check_date(date)?;
+        if trip.is_some_and(|t| t != 1 && t != 2) {
+            return Err("Pick Trip 1 or Trip 2.".into());
+        }
+        let mut p = self.store.get::<Plan>(date).cloned().unwrap_or_default();
+        if p.shop == trip {
+            return Ok(());
+        }
+        p.shop = trip;
+        self.store.put(date, p)
+    }
+
+    /// The shopping planned for `date`, with what's left on that trip's list.
+    pub fn shop_day(&self, date: &str) -> Option<ShopDay> {
+        let trip = self.store.get::<Plan>(date)?.shop?;
+        let left: Vec<&ListItem> =
+            self.store.all::<ListItem>().map(|(_, l)| l).filter(|l| l.trip == trip && !l.checked && !l.in_stock).collect();
+        let cost = left.iter().filter_map(|l| l.price).sum::<f64>();
+        Some(ShopDay { trip, items: left.len(), cost: (cost * 100.0).round() / 100.0 })
+    }
+
+    /// Plan a database food (or recipe) for a meal: like `add_food`, into the plan instead of the log.
+    pub fn plan_food(&mut self, date: &str, slot: &str, reference: &str, grams: f64) -> Result<()> {
+        check_date(date)?;
+        if !(grams > 0.0 && grams <= 5000.0) {
+            return Err("Grams must be between 1 and 5000.".into());
+        }
+        let f = self.food_detail(reference).ok_or("That food isn't in your databases any more.")?;
+        let k = grams / 100.0;
+        let kcal = (f.kcal100 * k).round();
+        if kcal >= 5000.0 {
+            return Err("That's more than 5000 kcal in one meal.".into());
+        }
+        let fiber = f.nut100.get("fiber").map(|x| round1(x * k));
+        let meal = PlanMeal {
+            slot: valid_meal(slot, "12:00"),
+            name: format!("{} · {} g", f.name, food::fmt_num(grams.round())),
+            kcal,
+            prot: round1(f.prot100 * k),
+            fiber,
+            ..Default::default()
+        };
+        self.add_plan_meal(date, meal)
     }
 
     /// Add one meal to a day's plan.
@@ -2267,7 +2332,9 @@ impl Core {
                 continue;
             }
             let meals = p.meals.into_iter().map(|m| PlanMeal { done: false, log_id: None, ..m }).collect();
-            self.store.put(&target, Plan { meals })?;
+            // The shopping day repeats too, unless that day already has one.
+            let shop = self.store.get::<Plan>(&target).and_then(|t| t.shop).or(p.shop);
+            self.store.put(&target, Plan { meals, shop })?;
             n += 1;
         }
         Ok(n)

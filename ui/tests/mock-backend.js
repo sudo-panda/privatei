@@ -121,6 +121,7 @@ function seedRich() {
     [{ slot: 'Lunch', name: 'Cottage cheese wrap', kcal: 430, prot: 34, fiber: 6 }, { slot: 'Dinner', name: 'Dal with roti', kcal: 650, prot: 29, fiber: 14 }],
   ];
   for (let i = -6; i <= 4; i++) db.plan[addDays(TODAY, i)] = { meals: plans[(i + 6) % 3].map((m) => ({ ...m, done: false })) };
+  db.plan[addDays(TODAY, 2)].shop = 1; // a shopping day this week
   // Medicines
   const from = addDays(TODAY, -30);
   db.meds.m1 = { groupId: 'g1', name: 'Vitamin D3', dose: '1000 IU', freq: 'daily', days: [], dom: null, time: '08:00', from, until: null };
@@ -266,7 +267,16 @@ function getDay({ date }) {
     meds, workouts: ws.map(([wid, w]) => ({ id: wid, kind: w.kind, mins: w.mins, kcal: w.kcal, name: w.name })),
     canCopyYesterday: own === 0 && live('log').some(([lid, l]) => l.date === y && !yIds.has(lid)),
     sleep: sleepView(db.sleep[date]),
+    shop: shopDay(date),
   };
+}
+
+// A planned shopping day, as in the core: the trip and what's still to buy on it.
+function shopDay(date) {
+  const trip = db.plan[date]?.shop;
+  if (!trip) return null;
+  const left = Object.values(db.list).filter((l) => l.trip === trip && !l.checked && !l.inStock);
+  return { trip, items: left.length, cost: Math.round(left.reduce((a, l) => a + (l.price || 0), 0) * 100) / 100 };
 }
 
 // Sleep, as in the core's sleep.rs.
@@ -499,7 +509,7 @@ function planAhead({ days = 7 }) {
     const meals = (db.plan[d]?.meals || []).map((m, idx) => ({ idx, slot: m.slot, name: m.name, kcal: m.kcal, prot: m.prot, fiber: m.fiber ?? null, done: !!m.done }));
     const kcal = meals.reduce((a, m) => a + m.kcal, 0), prot = meals.reduce((a, m) => a + m.prot, 0), fiber = meals.reduce((a, m) => a + (m.fiber || 0), 0);
     if (meals.length) { sk += kcal; sp += prot; n++; }
-    out.push({ date: d, dow: dow(d), isToday: i === 0, offset: i, meals, kcal, prot: r1(prot), fiber: r1(fiber), over: kcal > st.kcalTarget, protMet: prot >= st.protFloor, emptySlots: MEALS.filter((s) => !meals.some((m) => m.slot === s)) });
+    out.push({ date: d, dow: dow(d), isToday: i === 0, offset: i, meals, kcal, prot: r1(prot), fiber: r1(fiber), over: kcal > st.kcalTarget, protMet: prot >= st.protFloor, emptySlots: MEALS.filter((s) => !meals.some((m) => m.slot === s)), shop: shopDay(d) });
   }
   return { days: out, kcalTarget: st.kcalTarget, protFloor: st.protFloor, fiberFloor: st.fiberFloor, plannedDays: n, avgKcal: n ? Math.round(sk / n) : 0, avgProt: n ? r1(sp / n) : 0, hasEarlier: Object.entries(db.plan).some(([d, p]) => d < TODAY && p.meals.length) };
 }
@@ -543,7 +553,19 @@ const handlers = {
     else { const lid = id(); db.log[lid] = { date, meal: meal(m.slot), name: m.name, grams: null, kcal: m.kcal, prot: m.prot, est: false, ts: db.ts++ }; m.done = true; m.logId = lid; }
     return m.done;
   },
-  set_plan: ({ date, meals }) => { db.plan[date] = { meals: meals.map((m) => ({ ...m })) }; },
+  set_plan: ({ date, meals }) => { db.plan[date] = { ...db.plan[date], meals: meals.map((m) => ({ ...m })) }; },
+  set_shop_day: ({ date, trip }) => {
+    if (trip != null && trip !== 1 && trip !== 2) throw 'Pick Trip 1 or Trip 2.';
+    const p = (db.plan[date] ||= { meals: [] });
+    if (trip == null) delete p.shop; else p.shop = trip;
+  },
+  plan_food: ({ date, slot, reference, grams }) => {
+    const f = foodByRef(reference);
+    if (!f) throw "That food isn't in your databases any more.";
+    if (!(grams > 0 && grams <= 5000)) throw 'Grams must be between 1 and 5000.';
+    const k = grams / 100;
+    (db.plan[date] ||= { meals: [] }).meals.push({ slot: meal(slot), name: `${f.name} · ${Math.round(grams)} g`, kcal: Math.round(f.kcal100 * k), prot: r1(f.prot100 * k), fiber: f.nut100.fiber != null ? r1(f.nut100.fiber * k) : null, done: false, logId: null });
+  },
   copy_yesterday: ({ date }) => {
     const y = addDays(date, -1), ids = planIds(y);
     const rows = live('log').filter(([lid, l]) => l.date === y && !ids.has(lid));
@@ -656,7 +678,7 @@ const handlers = {
     for (const [d, p] of planned) {
       const t = addDays(d, 7);
       if (db.plan[t]?.meals.length) continue;
-      db.plan[t] = { meals: p.meals.map((m) => ({ ...m, done: false, logId: null })) };
+      db.plan[t] = { meals: p.meals.map((m) => ({ ...m, done: false, logId: null })), ...(db.plan[t]?.shop || p.shop ? { shop: db.plan[t]?.shop || p.shop } : {}) };
       n++;
     }
     return n;

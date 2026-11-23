@@ -7,7 +7,7 @@ let els = {};
 let trip = 1;
 
 function mount(root) {
-  const seg = h('div', { class: 'segment', role: 'group', 'aria-label': 'Trip' });
+  const seg = (els.seg = h('div', { class: 'segment', role: 'group', 'aria-label': 'Trip' }));
   for (const t of [1, 2]) {
     seg.append(h('button', { type: 'button', 'data-trip': t, 'aria-pressed': String(trip === t), onclick: () => { trip = t; for (const b of seg.children) b.setAttribute('aria-pressed', String(Number(b.dataset.trip) === trip)); refresh(); } }, `Trip ${t}`));
   }
@@ -42,7 +42,12 @@ function addCard() {
   return h('div', { class: 'card' }, h('div', { class: 'grid2' }, name, qty), h('div', { class: 'grid2' }, price, cat), err, h('button', { type: 'button', onclick: add }, 'Add to list'));
 }
 
-async function refresh() {
+/** o.trip (1 or 2) switches to that trip, e.g. from a shopping day on the Plan. */
+async function refresh(o = {}) {
+  if (o.trip === 1 || o.trip === 2) {
+    trip = o.trip;
+    for (const b of els.seg.children) b.setAttribute('aria-pressed', String(Number(b.dataset.trip) === trip));
+  }
   const v = await call('get_shop', { trip });
   const pct = Math.min(100, (v.spend / v.budget) * 100);
   fill(

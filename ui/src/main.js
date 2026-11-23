@@ -112,7 +112,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 function show(id, opts = {}) {
-  const s = screens.find((x) => x.id === id) || screens[0];
+  // "kitchen" is the Shopping screen's home in the new layout; the old one calls it "shop".
+  const s = screens.find((x) => x.id === id) || (id === 'kitchen' && screens.find((x) => x.id === 'shop')) || screens[0];
   if (!s.mounted) {
     s.mount(s.el);
     s.mounted = true;

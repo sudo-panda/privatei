@@ -1,4 +1,4 @@
-use privatei_core::app::{Clock, LogInput, MedInput};
+use privatei_core::app::{Clock, LogInput, MedInput, ShopDay};
 use privatei_core::model::Ingredient;
 use privatei_core::model::*;
 use privatei_core::Core;
@@ -775,4 +775,55 @@ fn sleep_in_the_day_and_in_history() {
     // Backups carry sleep.
     let dump = privatei_core::backup::export(&c.store, 0);
     assert_eq!(dump["collections"]["sleep"]["2026-11-21"]["bed"], "22:30");
+}
+
+#[test]
+fn shopping_days_on_the_plan_and_the_log() {
+    let mut c = core("2026-11-22", "12:00");
+    let item = |name: &str, trip: u8, price: Option<f64>, checked: bool| ListItem {
+        name: name.into(),
+        qty: "1".into(),
+        cat: "chilled".into(),
+        price,
+        trip,
+        checked,
+        in_stock: false,
+    };
+    c.save_list_item(None, item("Skyr", 1, Some(2.5), false)).unwrap();
+    c.save_list_item(None, item("Oats", 1, Some(1.75), false)).unwrap();
+    c.save_list_item(None, item("Milk", 1, Some(1.0), true)).unwrap(); // already in the basket
+    c.save_list_item(None, item("Tofu", 2, None, false)).unwrap();
+    c.set_shop_day("2026-11-24", Some(1)).unwrap();
+    let p = c.plan_ahead(7);
+    assert_eq!(p.days[2].shop, Some(ShopDay { trip: 1, items: 2, cost: 4.25 }));
+    assert!(p.days[0].shop.is_none());
+    // Planning meals that day keeps the shopping mark, and the Log shows it on the day.
+    c.add_plan_meal("2026-11-24", PlanMeal { slot: "Lunch".into(), name: "Bowl".into(), kcal: 500.0, prot: 30.0, ..Default::default() })
+        .unwrap();
+    assert_eq!(c.plan_ahead(7).days[2].shop.as_ref().map(|s| s.trip), Some(1));
+    c.set_shop_day("2026-11-22", Some(2)).unwrap();
+    assert_eq!(c.day("2026-11-22").unwrap().shop, Some(ShopDay { trip: 2, items: 1, cost: 0.0 }));
+    assert!(c.set_shop_day("2026-11-22", Some(3)).is_err());
+    c.set_shop_day("2026-11-22", None).unwrap();
+    assert!(c.day("2026-11-22").unwrap().shop.is_none());
+    // Repeat last week carries the shopping day over.
+    c.set_plan("2026-11-17", vec![PlanMeal { slot: "Lunch".into(), name: "Soup".into(), kcal: 300.0, prot: 10.0, ..Default::default() }])
+        .unwrap();
+    c.set_shop_day("2026-11-17", Some(1)).unwrap();
+    c.repeat_last_week().unwrap();
+    assert_eq!(c.store.get::<Plan>("2026-11-24").unwrap().shop, Some(1));
+}
+
+#[test]
+fn plan_a_database_food() {
+    let mut c = core("2026-11-22", "12:00");
+    c.foods = Some(privatei_core::fooddb::sample_db());
+    c.plan_food("2026-11-25", "Dinner", "usda:2", 250.0).unwrap();
+    let day = &c.plan_ahead(7).days[3];
+    assert_eq!(day.meals.len(), 1);
+    let m = &day.meals[0];
+    assert_eq!((m.slot.as_str(), m.kcal, m.prot, m.fiber), ("Dinner", 290.0, 22.5, Some(19.8)));
+    assert!(m.name.ends_with("· 250 g"), "{}", m.name);
+    assert!(c.plan_food("2026-11-25", "Dinner", "usda:999", 100.0).is_err());
+    assert!(c.plan_food("2026-11-25", "Dinner", "usda:2", 0.0).is_err());
 }

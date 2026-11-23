@@ -24,6 +24,15 @@ export function composite({ id, title, icon, short, parts, mode = 'segment', nar
       }
     },
     refresh(o = {}) {
+      // o.part ("Shopping") opens that part, e.g. "Open trip" from the Plan.
+      if (o.part && mode === 'segment') {
+        const i = parts.findIndex((p) => p.label === o.part);
+        if (i >= 0 && i !== active) {
+          active = i;
+          parts.forEach((p, j) => p.box.classList.toggle('hidden', j !== i));
+          for (const b of seg.children) b.setAttribute('aria-pressed', String(b.dataset.part === parts[i].label));
+        }
+      }
       const visible = mode === 'segment' ? [parts[active]] : parts;
       return Promise.all(visible.map((p) => {
         if (!p.mounted) { p.panel.mount(p.box); p.mounted = true; }
