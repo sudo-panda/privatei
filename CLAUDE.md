@@ -83,7 +83,9 @@ npm run test:ui                                # Playwright, WebKit + Chromium, 
 
 UI tests run against `vite build --mode mock`, which bundles `ui/tests/mock-backend.js`
 (an in-memory stand-in installed with `mockIPC`). Production builds never include it.
-Useful URL params for the mock build: `?seed=demo`, `?rows=3000`, `?today=YYYY-MM-DD`, `?hhmm=HH:MM`.
+Useful URL params for the mock build: `?seed=demo`, `?rows=3000`, `?today=YYYY-MM-DD`, `?hhmm=HH:MM`,
+`?layout=current` (the older five-tab layout; the app itself always uses the new one), `?delay=ms`
+(slow answers, for double-click/race tests; or set `window.__mockDelay`), `?update=0.5.0` (fake update).
 
 ## Releasing
 

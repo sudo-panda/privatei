@@ -30,7 +30,8 @@ import history from './screens/history.js';
 import { composite } from './compose.js';
 import { recipesPanel } from './screens/recipes.js';
 
-// Layouts being tried out. "current" is the shipped one until the new one is approved.
+// "new" (Log · Plan · Kitchen · Meds · Training · History) is the app. The older "current"
+// layout is still reachable with ?layout=current, for its tests.
 const LAYOUTS = {
   current: { name: 'Current', build: () => [today, add, meds, stock, week, shop, settings] },
   new: {
@@ -47,11 +48,8 @@ const LAYOUTS = {
   },
 };
 const params = new URLSearchParams(location.search);
-let layoutId = params.get('layout') || '';
-try {
-  if (!layoutId) layoutId = localStorage.getItem('layout') || '';
-} catch {}
-if (!LAYOUTS[layoutId]) layoutId = 'current';
+let layoutId = params.get('layout') || 'new';
+if (!LAYOUTS[layoutId]) layoutId = 'new';
 document.body.dataset.layout = layoutId;
 
 const screens = LAYOUTS[layoutId].build().map((x) => (x.id === 'settings' ? { ...x, noTab: true } : x));
@@ -178,26 +176,8 @@ async function start() {
       return performance.now() - t0;
     };
   }
-  if (params.has('layout')) layoutSwitcher();
   document.body.dataset.ready = '1';
   setTimeout(checkOnLaunch, 3000);
-}
-
-/** Preview-only: switch between the layouts being compared. */
-function layoutSwitcher() {
-  const bar = h('div', { class: 'layout-switcher', role: 'group', 'aria-label': 'Layout to try' });
-  for (const [id, l] of Object.entries(LAYOUTS)) {
-    bar.append(h('button', {
-      type: 'button',
-      'aria-pressed': String(id === layoutId),
-      onclick: () => {
-        const p = new URLSearchParams(location.search);
-        p.set('layout', id);
-        location.search = p.toString();
-      },
-    }, l.name));
-  }
-  document.body.append(bar);
 }
 
 start();

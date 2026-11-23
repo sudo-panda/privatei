@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
+// The new layout is the app; tests written for the older one ask for it by name.
 async function open(page, query = 'seed=demo') {
+  if (!/(^|&)layout=/.test(query)) query += '&layout=current';
   await page.goto(`/?${query}`);
   await expect(page.locator('body[data-ready="1"]')).toBeAttached();
 }
@@ -998,4 +1000,12 @@ test('Log meals show a fiber subtotal; the header keeps its height on Settings',
   await page.locator('#open-settings').click();
   const h2 = (await page.locator('header').first().boundingBox()).height;
   expect(h2).toBe(h1);
+});
+
+test('The app opens in the Log · Plan · Kitchen · Meds · Training · History layout', async ({ page }) => {
+  await page.goto('/?seed=demo');
+  await expect(page.locator('body[data-ready="1"]')).toBeAttached();
+  await expect(page.locator('#title')).toHaveText('Log');
+  await expect(page.locator('nav.tabs button[data-tab]')).toHaveText([/Log/, /Plan/, /Kitchen/, /Meds/, /Training/, /History/]);
+  await expect(page.locator('.layout-switcher')).toHaveCount(0);
 });
