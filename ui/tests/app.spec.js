@@ -589,7 +589,16 @@ test('Log date bar: scrolls to the selected day, Today pinned and outlined', asy
   for (let i = 0; i < 3; i++) await page.getByLabel('Previous day').click();
   await expect(page.locator('.strip-track [aria-pressed="true"]')).toHaveAttribute('data-date', '2026-11-19');
   expect(await track.evaluate((t) => t.scrollLeft)).toBe(before);
-  for (let i = 0; i < 42; i++) await page.getByLabel('Previous day').click();
+  // Jump far back by picking the oldest day on the bar (each pick adds a week before it),
+  // instead of ~40 single steps, which is too slow for WebKit in Playwright's Linux container.
+  const oldest = page.locator('.strip-track .strip-day').first();
+  for (const d of ['2026-10-26', '2026-10-19', '2026-10-12']) {
+    await expect(oldest).toHaveAttribute('data-date', d);
+    await oldest.click();
+    await expect(page.locator('.strip-track [aria-pressed="true"]')).toHaveAttribute('data-date', d);
+  }
+  // Then step back past the left end of the bar: it has to scroll to keep the day in view.
+  for (let i = 0; i < 4; i++) await page.getByLabel('Previous day').click();
   const sel = page.locator('.strip-track [aria-pressed="true"]');
   await expect(sel).toHaveAttribute('data-date', '2026-10-08');
   await expect(sel).toBeInViewport();
@@ -815,6 +824,8 @@ test('Settings: an empty protein or fiber floor is refused, not saved as 0', asy
 test('Install and restart installs without checking again', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await open(page, 'seed=demo&layout=new&update=0.5.0');
+  // The quiet check 3 s after launch would otherwise land mid-test and be counted.
+  await expect(page.locator('#update-banner')).toBeVisible({ timeout: 10_000 });
   await page.locator('#open-settings').click();
   const checks = () => page.evaluate(() => window.__mock.calls.filter((x) => x === 'plugin:updater|check').length);
   await page.locator('#check-updates').click();
