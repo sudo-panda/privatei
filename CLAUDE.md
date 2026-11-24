@@ -87,6 +87,37 @@ Useful URL params for the mock build: `?seed=demo`, `?rows=3000`, `?today=YYYY-M
 `?layout=current` (the older five-tab layout; the app itself always uses the new one), `?delay=ms`
 (slow answers, for double-click/race tests; or set `window.__mockDelay`), `?update=0.5.0` (fake update).
 
+## Working on the Fedora server
+
+The repo is also worked on from a Fedora Linux server. Same checks, two differences:
+
+- **UI tests run in Playwright's container**, not with `npm run test:ui` directly: Playwright's
+  WebKit is built for Ubuntu and `--with-deps` only knows apt. `:Z` is for SELinux. Keep the
+  image tag equal to the installed `@playwright/test` version (`npx playwright --version`).
+  ```bash
+  podman run --rm --ipc=host -v "$PWD":/work:Z -w /work mcr.microsoft.com/playwright:v1.65.1-noble npm run test:ui
+  ```
+- **The real app can't run there** (it's a Mac app). Check screens in the mock build
+  (`npm run build:mock`, then `vite preview --mode mock` on 127.0.0.1:4173); the owner tries
+  changes in the real app on the Mac after an update.
+
+Setting up a fresh server:
+
+```bash
+sudo dnf install -y webkit2gtk4.1-devel openssl-devel curl wget file libappindicator-gtk3-devel librsvg2-devel libxdo-devel git tmux gh podman
+sudo dnf group install -y c-development
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && . ~/.cargo/env && rustup component add rustfmt clippy
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . ~/.nvm/nvm.sh && nvm install 22
+gh auth login
+git clone git@github.com:sudo-panda/privatei.git && cd privatei
+npm ci && npm run build:ui
+mkdir -p apps/desktop/resources && touch apps/desktop/resources/foods.sqlite   # placeholder; releases build the real one
+```
+
+Commit with the owner's GitHub no-reply email (`git config --global user.email`, copied from
+the Mac). The update-signing key (`~/.tauri/privatei.key`) stays on the Mac: releases are signed
+on GitHub from the repo secret, so releasing from the server is the same tag and push.
+
 ## Releasing
 
 1. Bump the version in `Cargo.toml` (`[workspace.package]`), `apps/desktop/tauri.conf.json`
