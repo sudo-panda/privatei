@@ -114,8 +114,8 @@ npm ci && npm run build:ui
 mkdir -p apps/desktop/resources && touch apps/desktop/resources/foods.sqlite   # placeholder; releases build the real one
 ```
 
-Commit with the owner's GitHub no-reply email (`git config --global user.email`, copied from
-the Mac). The update-signing key (`~/.tauri/privatei.key`) stays on the Mac: releases are signed
+Commit with the owner's gmail (`git config --global user.email`, the same as on the Mac).
+Commits up to v0.5.2 used the GitHub no-reply address; that's fine, both are the owner's. The update-signing key (`~/.tauri/privatei.key`) stays on the Mac: releases are signed
 on GitHub from the repo secret, so releasing from the server is the same tag and push.
 
 ## Releasing
