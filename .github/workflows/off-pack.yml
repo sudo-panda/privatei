@@ -1,0 +1,53 @@
+name: off-pack
+
+# Builds the Swiss Open Food Facts pack (products sold in Switzerland, ~7 MB) from OFF's
+# worldwide CSV export and publishes it as `off-ch.jsonl.gz` on the `off-ch-pack`
+# pre-release. The app downloads it from Settings → Food databases. A pre-release is
+# never "latest", so app updates (releases/latest/download/latest.json) don't see it.
+# The data is ODbL: the release notes carry the attribution and licence.
+
+on:
+  schedule:
+    - cron: "17 4 3 * *" # monthly, 3rd at 04:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: off-pack
+  cancel-in-progress: false
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the pack builder
+        run: cargo build --release -p privatei-core --features import --bin build-off-pack
+      - name: Build the pack from the Open Food Facts export
+        run: |
+          set -o pipefail
+          DATE=$(date -u +%Y-%m-%d)
+          curl -fsSL --retry 3 -A "Private-I pack builder (+https://github.com/${{ github.repository }})" \
+            https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz \
+            | target/release/build-off-pack --date "$DATE" --out off-ch.jsonl.gz
+          echo "DATE=$DATE" >> "$GITHUB_ENV"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="Products sold in Switzerland from the Open Food Facts export of $DATE, for Private-I's offline food search.
+
+          Data © Open Food Facts contributors (https://world.openfoodfacts.org), made available under the Open Database License (ODbL) 1.0 (https://opendatacommons.org/licenses/odbl/1-0/); individual contents under the Database Contents License (https://opendatacommons.org/licenses/dbcl/1-0/). This file is an extract of that database and is also made available under the ODbL.
+
+          Format: gzipped JSON lines; a header line, then one product per line with the Open Food Facts fields code, product_name, brands, serving_quantity and nutriments (per 100 g)."
+          if ! gh release view off-ch-pack >/dev/null 2>&1; then
+            gh release create off-ch-pack --prerelease --latest=false --title "Swiss products pack (Open Food Facts)" --notes "$NOTES"
+          else
+            gh release edit off-ch-pack --prerelease --latest=false --notes "$NOTES"
+          fi
+          gh release upload off-ch-pack off-ch.jsonl.gz --clobber

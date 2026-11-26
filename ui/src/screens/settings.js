@@ -257,24 +257,16 @@ function renderLearned(items) {
 
 const AVAILABLE = [
   { id: 'swiss', name: 'Swiss Food Composition Database', what: 'About 1,200 Swiss foods (FSVO). Downloaded from naehrwertdaten.ch, about 1 MB.', command: 'download_swiss' },
+  { id: 'offch', name: 'Swiss products (Open Food Facts)', what: 'About 90,000 packaged products sold in Switzerland, including Migros and Coop. Refreshed monthly from Open Food Facts, about 7 MB.', command: 'download_off_pack' },
 ];
 
 function renderFoods(sources, note = null) {
   const st = status('foods-status');
   if (note) say(st, note, 'ok');
   const have = new Map(sources.map((x) => [x.id, x]));
-  const rows = sources.map((x) =>
-    h('div', { class: 'set-row', 'data-source': x.id },
-      h('div', { class: 'set-label' },
-        h('div', { class: 'set-name', text: x.name }),
-        h('div', { class: 'small muted', text: `${x.foods.toLocaleString()} foods · ${x.version}` }),
-        h('details', { class: 'small' }, h('summary', { text: 'Licence and source' }), h('div', { class: 'muted', text: `${x.licence}. ${x.attribution}` }))),
-      h('div', { class: 'set-control' },
-        x.id === 'usda' || x.id === 'cofid'
-          ? h('span', { class: 'badge good', text: 'Built in' })
-          : h('button', { type: 'button', class: 'ghost danger', onclick: async () => { await call('remove_food_source', { id: x.id }); renderFoods(await call('food_sources')); } }, 'Remove'))));
-  const offers = AVAILABLE.filter((a) => !have.has(a.id)).map((a) => {
-    const btn = h('button', { type: 'button', id: `get-${a.id}` }, 'Download');
+  // Download (or download again) one of the AVAILABLE databases.
+  const getter = (a, label) => {
+    const btn = h('button', { type: 'button', id: `get-${a.id}`, class: label === 'Update' ? 'ghost' : '' }, label);
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       say(st, `Downloading ${a.name}…`);
@@ -286,8 +278,24 @@ function renderFoods(sources, note = null) {
         btn.disabled = false;
       }
     });
-    return h('div', { class: 'set-row' }, h('div', { class: 'set-label' }, h('div', { class: 'set-name', text: a.name }), h('div', { class: 'small muted', text: a.what })), h('div', { class: 'set-control' }, btn));
-  });
+    return btn;
+  };
+  // Packs that change monthly can be downloaded again.
+  const updatable = (id) => (id === 'offch' ? AVAILABLE.find((a) => a.id === id) : null);
+  const rows = sources.map((x) =>
+    h('div', { class: 'set-row', 'data-source': x.id },
+      h('div', { class: 'set-label' },
+        h('div', { class: 'set-name', text: x.name }),
+        h('div', { class: 'small muted', text: `${x.foods.toLocaleString()} foods · ${x.version}` }),
+        h('details', { class: 'small' }, h('summary', { text: 'Licence and source' }), h('div', { class: 'muted', text: `${x.licence}. ${x.attribution}` }))),
+      h('div', { class: 'set-control' },
+        x.id === 'usda' || x.id === 'cofid'
+          ? h('span', { class: 'badge good', text: 'Built in' })
+          : h('div', { class: 'row' },
+            updatable(x.id) ? getter(updatable(x.id), 'Update') : null,
+            h('button', { type: 'button', class: 'ghost danger', onclick: async () => { await call('remove_food_source', { id: x.id }); renderFoods(await call('food_sources')); } }, 'Remove')))));
+  const offers = AVAILABLE.filter((a) => !have.has(a.id)).map((a) =>
+    h('div', { class: 'set-row', 'data-offer': a.id }, h('div', { class: 'set-label' }, h('div', { class: 'set-name', text: a.name }), h('div', { class: 'small muted', text: a.what })), h('div', { class: 'set-control' }, getter(a, 'Download'))));
   fill(
     els.foods,
     section('Food databases',

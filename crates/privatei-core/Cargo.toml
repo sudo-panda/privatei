@@ -9,8 +9,8 @@ description = "Private-I core: data, storage, calculations and AI calls. No UI."
 default = []
 # Run the user's installed Claude Code CLI. Desktop only.
 cli = []
-# Import national food databases (USDA CSV, Swiss xlsx).
-import = ["dep:calamine", "dep:csv"]
+# Import national food databases (USDA CSV, Swiss xlsx) and the Swiss Open Food Facts pack.
+import = ["dep:calamine", "dep:csv", "dep:flate2"]
 
 [dependencies]
 rusqlite = { version = "0.32", features = ["bundled"] }
@@ -20,10 +20,16 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 calamine = { version = "0.38", optional = true }
 csv = { version = "1.4", optional = true }
+flate2 = { version = "1", optional = true }
 
 [[bin]]
 name = "build-fooddb"
 path = "src/bin/build_fooddb.rs"
+required-features = ["import"]
+
+[[bin]]
+name = "build-off-pack"
+path = "src/bin/build_off_pack.rs"
 required-features = ["import"]
 
 [dev-dependencies]

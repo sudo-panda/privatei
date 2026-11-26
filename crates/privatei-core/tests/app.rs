@@ -827,3 +827,99 @@ fn plan_a_database_food() {
     assert!(c.plan_food("2026-11-25", "Dinner", "usda:999", 100.0).is_err());
     assert!(c.plan_food("2026-11-25", "Dinner", "usda:2", 0.0).is_err());
 }
+
+#[test]
+fn swiss_pack_installs_dedupes_lookups_and_removes() {
+    use privatei_core::fooddb::NewFood;
+    use privatei_core::off;
+    let dir = std::env::temp_dir().join(format!("privatei-pack-{}", privatei_core::store::new_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut c = core("2026-11-22", "12:00");
+    c.foods = Some(privatei_core::fooddb::sample_db());
+    let pack = |name: &str| {
+        format!(
+            "{{\"pack\":\"off-ch\",\"date\":\"2026-11-23\"}}\n{{\"code\":\"7610000000011\",\"product_name\":\"{name}\",\"brands\":\"Migros\",\"nutriments\":{{\"energy-kcal_100g\":62,\"proteins_100g\":11}}}}\n"
+        )
+    };
+    let dest = dir.join(off::PACK_FILE);
+    let tmp = dir.join("a.part");
+    off::pack_to_db(pack("Skyr nature").as_bytes(), &tmp).unwrap();
+    c.install_off_pack(&tmp, &dest).unwrap();
+    assert!(!tmp.exists() && dest.is_file());
+    let hits = c.search_foods("skyr", 10);
+    let hit = hits.iter().find(|f| f.source == off::PACK_SOURCE).unwrap();
+    assert_eq!(hit.reference, "offch:7610000000011");
+    c.add_food("2026-11-22", "Snack", &hit.reference, 150.0).unwrap();
+    assert_eq!(c.day("2026-11-22").unwrap().kcal, 93.0);
+
+    // An online lookup of a product the pack has returns the pack's entry, not a copy.
+    let online = |code: &str, name: &str| NewFood {
+        source_id: code.into(),
+        name: name.into(),
+        category: "Packaged product".into(),
+        kcal100: 70.0,
+        ..Default::default()
+    };
+    let got = c.save_off(vec![online("7610000000011", "Skyr nature (Migros)"), online("4000000000000", "Other skyr")]).unwrap();
+    let refs: Vec<&str> = got.iter().map(|f| f.reference.as_str()).collect();
+    assert_eq!(refs, ["offch:7610000000011", "off:4000000000000"]);
+    let products = c.search_foods("skyr", 10).into_iter().filter(|f| f.category == "Packaged product").count();
+    assert_eq!(products, 2, "no duplicate of the pack product");
+
+    // Updating swaps the file in place.
+    let tmp2 = dir.join("b.part");
+    off::pack_to_db(pack("Skyr natur").as_bytes(), &tmp2).unwrap();
+    c.install_off_pack(&tmp2, &dest).unwrap();
+    assert_eq!(c.food_detail("offch:7610000000011").unwrap().name, "Skyr natur (Migros)");
+    assert_eq!(c.food_sources().iter().filter(|s| s.id == off::PACK_SOURCE).count(), 1);
+    // A missing temp file leaves the installed pack working.
+    assert!(c.install_off_pack(&dir.join("missing.part"), &dest).is_err());
+    assert!(c.food_detail("offch:7610000000011").is_some());
+
+    // Removing it deletes the file; the online cache stays.
+    c.remove_food_source(off::PACK_SOURCE).unwrap();
+    assert!(!dest.exists());
+    assert!(c.food_detail("offch:7610000000011").is_none());
+    assert!(c.food_detail("off:4000000000000").is_some());
+    assert_eq!(c.day("2026-11-22").unwrap().kcal, 93.0, "the log keeps its numbers");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn generic_names_rank_and_match_generic_foods_before_products() {
+    use privatei_core::ai::{AiAnswer, Provider};
+    use privatei_core::fooddb::NewFood;
+    let mut c = core("2026-11-22", "16:00");
+    c.foods = Some(privatei_core::fooddb::sample_db());
+    let product = |code: &str, name: &str| NewFood {
+        source_id: code.into(),
+        name: name.into(),
+        category: "Packaged product".into(),
+        kcal100: 80.0,
+        prot100: 10.0,
+        ..Default::default()
+    };
+    let products: Vec<NewFood> = (0..12).map(|i| product(&format!("76100000000{i:02}"), &format!("Lentils snack {i} (Coop)"))).collect();
+    c.save_off(products).unwrap();
+    c.save_off(vec![product("7610000000999", "Protein pudding (Ehrmann)")]).unwrap();
+    // Search: the generic food first, and a third of the list kept for products.
+    let hits = c.search_foods("lentils", 9);
+    assert_eq!(hits[0].reference, "usda:2");
+    assert_eq!(hits.iter().filter(|h| h.source == "off").count(), 8, "only one generic lentil food, so products fill the rest");
+    assert_eq!(
+        c.foods.as_ref().unwrap().search("lentils", 3).iter().map(|h| h.source.as_str()).collect::<Vec<_>>(),
+        ["usda", "off", "off"]
+    );
+    // Work out: a generic name matches the generic food, never a packaged product.
+    let p = c.prepare_estimate("200 g lentils and a protein pudding").unwrap();
+    let items = serde_json::json!({"items": [
+        {"name": "Lentils", "food": "lentils", "grams": 200, "kcal": 300, "prot": 20, "est": false, "meal": "Snack"},
+        {"name": "Protein pudding", "food": "protein pudding", "grams": 200, "kcal": 160, "prot": 20, "est": false, "meal": "Snack"}
+    ], "note": ""});
+    let v = c.finish_estimate(p, Some(Ok(AiAnswer { provider: Provider::Gemini, value: items })));
+    let lentils = v.items.iter().find(|r| r.item.name.starts_with("Lentils")).unwrap();
+    assert_eq!(lentils.item.food_ref.as_deref(), Some("usda:2"));
+    let pudding = v.items.iter().find(|r| r.item.name.starts_with("Protein")).unwrap();
+    assert!(pudding.item.food_ref.is_none(), "not matched to the Ehrmann product");
+    assert_eq!(pudding.item.kcal, 160.0);
+}

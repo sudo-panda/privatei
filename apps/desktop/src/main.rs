@@ -190,6 +190,16 @@ async fn download_swiss(s: State<'_, AppState>) -> R<usize> {
 }
 
 #[tauri::command]
+async fn download_off_pack(app: tauri::AppHandle, s: State<'_, AppState>) -> R<usize> {
+    let dest = app.path().app_data_dir().map_err(|e| e.to_string())?.join(privatei_core::off::PACK_FILE);
+    // A unique name, so two downloads at once never write the same file.
+    let tmp = dest.with_extension(format!("{}.part", privatei_core::store::new_id()));
+    let t = tmp.clone();
+    let (n, _date) = off_thread(move || privatei_core::off::download_pack(privatei_core::off::PACK_URL, &t)).await??;
+    with(&s, |c| c.install_off_pack(&tmp, &dest).map(|_| n))
+}
+
+#[tauri::command]
 async fn search_off(s: State<'_, AppState>, query: String) -> R<Vec<privatei_core::fooddb::DbFood>> {
     let foods = off_thread(move || privatei_core::off::fetch(&query, privatei_core::off::BASE)).await??;
     with(&s, |c| c.save_off(foods))
@@ -467,7 +477,16 @@ fn main() {
             // The shipped USDA database (read-only) plus a writable one for downloads.
             let bundled = app.path().resolve("resources/foods.sqlite", tauri::path::BaseDirectory::Resource).ok();
             match privatei_core::fooddb::FoodDb::open(bundled.as_deref(), &data.join("foods-user.sqlite")) {
-                Ok(db) => core.foods = Some(db),
+                Ok(mut db) => {
+                    // The Swiss Open Food Facts pack, if downloaded (its own file: ODbL).
+                    let pack = data.join(privatei_core::off::PACK_FILE);
+                    if pack.is_file() {
+                        if let Err(e) = db.attach(&pack) {
+                            eprintln!("Private-I: Swiss products file unreadable: {e}");
+                        }
+                    }
+                    core.foods = Some(db)
+                }
                 Err(e) => eprintln!("Private-I: food database unavailable: {e}"),
             }
             if core.store.skipped > 0 {
@@ -508,6 +527,7 @@ fn main() {
             get_recipes,
             delete_recipe,
             download_swiss,
+            download_off_pack,
             search_off,
             remove_food_source,
             food_names,

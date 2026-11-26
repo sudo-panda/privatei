@@ -8,7 +8,7 @@
 use crate::nutrients::{self, Nut};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub type Result<T> = std::result::Result<T, String>;
 
@@ -73,6 +73,8 @@ pub struct DbFood {
 struct Part {
     conn: Connection,
     writable: bool,
+    /// Set for an attached pack file, so removing its source can delete the file.
+    pack: Option<PathBuf>,
 }
 
 pub struct FoodDb {
@@ -86,14 +88,14 @@ impl FoodDb {
         let mut parts = vec![];
         if let Some(b) = bundled.filter(|p| p.is_file()) {
             let conn = Connection::open_with_flags(b, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(err)?;
-            parts.push(Part { conn, writable: false });
+            parts.push(Part { conn, writable: false, pack: None });
         }
         if let Some(dir) = user.parent() {
             std::fs::create_dir_all(dir).map_err(err)?;
         }
         let conn = Connection::open(user).map_err(err)?;
         conn.execute_batch(SCHEMA).map_err(err)?;
-        parts.push(Part { conn, writable: true });
+        parts.push(Part { conn, writable: true, pack: None });
         Ok(FoodDb { parts })
     }
 
@@ -107,7 +109,27 @@ impl FoodDb {
             None => Connection::open_in_memory().map_err(err)?,
         };
         conn.execute_batch(SCHEMA).map_err(err)?;
-        Ok(FoodDb { parts: vec![Part { conn, writable: true }] })
+        Ok(FoodDb { parts: vec![Part { conn, writable: true, pack: None }] })
+    }
+
+    /// Add a read-only pack file (one source per file, e.g. the Swiss Open Food Facts pack).
+    /// A file that isn't a food database is refused.
+    pub fn attach(&mut self, path: &Path) -> Result<()> {
+        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(err)?;
+        conn.query_row("SELECT COUNT(*) FROM source", [], |r| r.get::<_, i64>(0)).map_err(err)?;
+        // Search reads the pack's FTS table; make sure it's there too.
+        conn.query_row("SELECT COUNT(*) FROM food_fts WHERE food_fts MATCH 'x'", [], |r| r.get::<_, i64>(0)).map_err(err)?;
+        self.parts.push(Part { conn, writable: false, pack: Some(path.to_path_buf()) });
+        Ok(())
+    }
+
+    /// Close the pack file holding `source` (if any) and return its path.
+    pub fn detach(&mut self, source: &str) -> Option<PathBuf> {
+        let i = self.parts.iter().position(|p| {
+            p.pack.is_some()
+                && p.conn.query_row("SELECT 1 FROM source WHERE id = ?1", [source], |_| Ok(())).optional().ok().flatten().is_some()
+        })?;
+        self.parts.remove(i).pack
     }
 
     fn writable(&self) -> Result<&Connection> {
@@ -189,7 +211,12 @@ impl FoodDb {
             }
         }
         hits.sort_by(|a, b| b.0.total_cmp(&a.0));
-        hits.into_iter().take(limit.clamp(1, 100)).map(|(_, f)| f).collect()
+        // Generic foods first: "milk" should find milk, not 90,000 packaged products. Up to a
+        // third of the list is kept for products, so "milk" still shows some to pick from.
+        let limit = limit.clamp(1, 100);
+        let (products, generic): (Vec<_>, Vec<_>) = hits.into_iter().map(|(_, f)| f).partition(|f| crate::off::is_product(&f.source));
+        let keep = generic.len().min(limit - products.len().min(limit / 3));
+        generic.into_iter().take(keep).chain(products).take(limit).collect()
     }
 
     /// Look a food up by its reference ("usda:167512").

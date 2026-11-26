@@ -63,6 +63,7 @@ const db = {
   online: true,
   swiss: [],
   off: [],
+  offch: [],
   sources: [{ id: 'cofid', name: 'UK CoFID (McCance and Widdowson)', version: '2021', licence: 'Open Government Licence v3.0', attribution: "Contains public sector information licensed under the Open Government Licence v3.0. McCance and Widdowson's Composition of Foods Integrated Dataset, Public Health England / OHID.", url: 'https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid', importedAt: 0, foods: 2882 }, { id: 'usda', name: 'USDA FoodData Central', version: 'SR Legacy 2018-04 + Foundation 2026-10', licence: 'Public domain (CC0 1.0)', attribution: 'U.S. Department of Agriculture, Agricultural Research Service. FoodData Central (SR Legacy, Foundation Foods). fdc.nal.usda.gov', url: 'https://fdc.nal.usda.gov/download-datasets/', importedAt: 0, foods: 8237 }],
   ts: 1,
   calls: [],
@@ -166,6 +167,13 @@ const SWISS_SAMPLE = [
   { ref: 'swiss:sample-2', name: 'Birchermüesli (sample row)', source: 'swiss', sourceName: 'Swiss Food Composition Database', category: 'Cereals', kcal100: 120, prot100: 4, nut100: { fiber: 2.5, calcium: 90, vitC: 6 }, portions: [] },
   { ref: 'swiss:sample-3', name: 'Appenzeller cheese (sample row)', source: 'swiss', sourceName: 'Swiss Food Composition Database', category: 'Hard cheese', kcal100: 390, prot100: 25, nut100: { calcium: 800, sodium: 700, satFat: 20 }, portions: [] },
 ];
+// Made-up products standing in for the Swiss Open Food Facts pack.
+const OFFCH_SAMPLE = [
+  { ref: 'offch:7610000000103', name: 'Pumpernickel 8 slices (sample brand)', source: 'offch', sourceName: 'Open Food Facts: Swiss products', category: 'Packaged product', kcal100: 200, prot100: 6, nut100: { fiber: 8, sodium: 400 }, portions: [{ label: '1 serving', grams: 62 }] },
+  { ref: 'offch:7610000000110', name: 'Hafer Drink (sample brand)', source: 'offch', sourceName: 'Open Food Facts: Swiss products', category: 'Packaged product', kcal100: 46, prot100: 1, nut100: { sugar: 4, calcium: 120 }, portions: [] },
+];
+const offchSource = (n) => ({ id: 'offch', name: 'Open Food Facts: Swiss products', version: '2026-11-23', licence: 'Open Database License (ODbL) 1.0; contents under the Database Contents License', attribution: 'Product data © Open Food Facts contributors, openfoodfacts.org. Products sold in Switzerland, from the Open Food Facts export', url: 'https://world.openfoodfacts.org/data', importedAt: Date.now(), foods: n });
+
 // Made-up packaged products standing in for Open Food Facts answers.
 const OFF_SAMPLE = [
   { ref: 'off:7610000000011', name: 'Skyr nature (sample brand)', source: 'off', sourceName: 'Open Food Facts', category: 'Packaged product', kcal100: 62, prot100: 11, nut100: { sugar: 4, addedSugar: 0, fat: 0.2, satFat: 0.1, sodium: 40, calcium: 120 }, portions: [{ label: '1 serving', grams: 150 }] },
@@ -179,7 +187,7 @@ function builtin() {
   return out;
 }
 function allFoods() {
-  return [...builtin(), ...USDA_SAMPLE, ...db.swiss, ...db.off];
+  return [...builtin(), ...USDA_SAMPLE, ...db.swiss, ...db.off, ...db.offch];
 }
 function recipeView(rid, r) {
   const raw = r.ingredients.reduce((a, i) => a + i.grams, 0);
@@ -218,7 +226,7 @@ function searchFoods(q) {
   const hit = (name) => { const ws = norm(name).split(/[^a-z0-9]+/); return words.every((w) => ws.some((n) => n.startsWith(w))); };
   const score = (f) => { const ws = norm(f.name).split(/[^a-z0-9]+/); return words.filter((w) => ws.includes(w)).length * 2 + (norm(f.name).startsWith(words[0]) ? 3 : 0) - f.name.length / 60; };
   const local = [...recipeFoods(), ...builtin()].filter((f) => hit(f.name)).slice(0, 6);
-  const dbHits = [...USDA_SAMPLE, ...db.swiss, ...db.off].filter((f) => hit(f.name) || hit(f.category)).sort((a, b) => score(b) - score(a));
+  const dbHits = [...USDA_SAMPLE, ...db.swiss, ...db.off, ...db.offch].filter((f) => hit(f.name) || hit(f.category)).sort((a, b) => score(b) - score(a));
   return [...local, ...dbHits].slice(0, 30).map((f) => ({ ...f, fiber100: f.nut100.fiber ?? null, known: Object.keys(f.nut100).length }));
 }
 
@@ -763,7 +771,13 @@ const handlers = {
     db.sources = [...db.sources.filter((x) => x.id !== 'swiss'), { id: 'swiss', name: 'Swiss Food Composition Database', version: '2026-07', licence: 'Free of charge, source must be acknowledged', attribution: 'Swiss Food Composition Database, Federal Food Safety and Veterinary Office FSVO. naehrwertdaten.ch', url: 'https://naehrwertdaten.ch/en/downloads/', importedAt: Date.now(), foods: 1216 }];
     return 1216;
   },
-  remove_food_source: ({ id: sid }) => { if (sid === 'usda') throw "The USDA database comes with the app and can't be removed."; db.sources = db.sources.filter((x) => x.id !== sid); if (sid === 'swiss') db.swiss = []; },
+  download_off_pack: () => {
+    if (!db.online) throw "Couldn't reach GitHub to download the Swiss products (offline?).";
+    db.offch = OFFCH_SAMPLE;
+    db.sources = [...db.sources.filter((x) => x.id !== 'offch'), offchSource(89301)];
+    return 89301;
+  },
+  remove_food_source: ({ id: sid }) => { if (sid === 'usda') throw "The USDA database comes with the app and can't be removed."; db.sources = db.sources.filter((x) => x.id !== sid); if (sid === 'swiss') db.swiss = []; if (sid === 'offch') db.offch = []; },
   update_log: ({ id: lid, entry }) => {
     const l = db.log[lid];
     if (!l) throw 'That entry no longer exists.';

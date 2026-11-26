@@ -65,6 +65,15 @@ tests/fixtures/         made-up sample export (never real data)
   Open Food Facts online (network outside the Core lock, then `Core::save_off` caches into the
   writable DB as source "off", ODbL). German BLS sits behind a proof-of-work bot check on
   OpenAgrar: never automate past it; it needs a user-picked file import (not built yet).
+- Swiss products pack (`off.rs`, source `offch`): `.github/workflows/off-pack.yml` runs monthly,
+  turns OFF's worldwide CSV export into `off-ch.jsonl.gz` (products sold in Switzerland, ~89k,
+  ~7 MB; bin `build-off-pack`) and uploads it to the `off-ch-pack` **pre-release** (never
+  "latest", so the updater ignores it). Settings downloads it outside the Core lock, builds
+  `foods-off-ch.sqlite` (its own read-only file, ODbL) and `Core::install_off_pack` swaps it in.
+  Migros/Coop have no public data API; don't scrape their sites.
+- Search ranks generic foods (USDA, CoFID, Swiss, …) above packaged products (`off`, `offch`)
+  and keeps a third of the list for products; "Work out" never matches a generic AI name to
+  a packaged product.
 - Recipes (`Recipe`, table `recipes`, schema v2) keep each ingredient's nutrition snapshot;
   `recipe:<id>` refs work in search/add_food like database foods.
 - Not allowed to ship: India IFCT 2017 (NIN copyright). Open Food Facts is ODbL (share-alike):

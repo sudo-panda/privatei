@@ -1368,7 +1368,9 @@ impl Core {
         let words: Vec<&str> = q.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
         let mut hits = vec![];
         for n in (1..=words.len()).rev() {
+            // A generic name never matches a packaged product ("apple" isn't "Apple juice (Coop)").
             hits = self.search_foods(&words[..n].join(" "), 8);
+            hits.retain(|h| !crate::off::is_product(&h.source));
             if !hits.is_empty() {
                 break;
             }
@@ -1675,17 +1677,38 @@ impl Core {
     }
 
     /// Save products fetched from Open Food Facts and return them as foods.
+    /// Products already in the Swiss pack are returned from the pack, not saved twice.
     pub fn save_off(&mut self, foods: Vec<crate::fooddb::NewFood>) -> Result<Vec<crate::fooddb::DbFood>> {
         let db = self.foods.as_ref().ok_or("The food database isn't open.")?;
-        db.add_foods(&crate::off::info(), &foods)?;
-        Ok(foods.iter().filter_map(|f| db.get(&format!("off:{}", f.source_id))).collect())
+        let in_pack = |f: &crate::fooddb::NewFood| db.get(&format!("{}:{}", crate::off::PACK_SOURCE, f.source_id));
+        let new: Vec<_> = foods.iter().filter(|f| in_pack(f).is_none()).cloned().collect();
+        db.add_foods(&crate::off::info(), &new)?;
+        Ok(foods.iter().filter_map(|f| in_pack(f).or_else(|| db.get(&format!("off:{}", f.source_id)))).collect())
+    }
+
+    /// Swap in a freshly built Swiss pack file (`tmp`, from `off::download_pack`) as `dest`.
+    pub fn install_off_pack(&mut self, tmp: &std::path::Path, dest: &std::path::Path) -> Result<()> {
+        let db = self.foods.as_mut().ok_or("The food database isn't open.")?;
+        db.detach(crate::off::PACK_SOURCE);
+        if let Err(e) = std::fs::rename(tmp, dest) {
+            let _ = std::fs::remove_file(tmp);
+            if dest.is_file() {
+                let _ = db.attach(dest);
+            }
+            return Err(format!("Couldn't save the Swiss products: {e}"));
+        }
+        db.attach(dest)
     }
 
     pub fn remove_food_source(&mut self, id: &str) -> Result<()> {
         if id == "usda" || id == "cofid" {
             return Err("That database comes with the app and can't be removed.".into());
         }
-        self.foods.as_ref().ok_or("The food database isn't open.")?.remove_source(id)
+        let db = self.foods.as_mut().ok_or("The food database isn't open.")?;
+        if let Some(path) = db.detach(id) {
+            return std::fs::remove_file(&path).map_err(|e| format!("Couldn't delete {}: {e}", path.display()));
+        }
+        db.remove_source(id)
     }
 
     pub fn quick(&self, name: &str, grams: Option<f64>) -> Option<QuickFill> {

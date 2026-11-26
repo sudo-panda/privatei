@@ -1210,3 +1210,36 @@ test('Draft lines work like a food diary: change the amount, unit, meal or the f
   expect(saved.meal).toBe('Lunch');
   expect(saved.foodRef).toMatch(/^usda:/);
 });
+
+test('Settings: download the Swiss products pack, find a product, update and remove it', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, 'seed=demo&layout=new');
+  await page.locator('#open-settings').click();
+  const offer = page.locator('[data-offer="offch"]');
+  await expect(offer).toContainText('Migros and Coop');
+  // Offline: an error, and the button can be tried again.
+  await page.evaluate(() => { window.__mock.online = false; });
+  await page.locator('#get-offch').click();
+  await expect(page.locator('#foods-status')).toContainText('offline');
+  await expect(page.locator('#get-offch')).toBeEnabled();
+  await page.evaluate(() => { window.__mock.online = true; });
+  await page.locator('#get-offch').click();
+  await expect(page.locator('#foods-status')).toHaveText('Added 89,301 foods.');
+  const row = page.locator('[data-source="offch"]');
+  await expect(row).toContainText('89,301 foods · 2026-11-23');
+  await row.locator('summary').click();
+  await expect(row).toContainText('Open Food Facts contributors');
+  await expect(offer).toHaveCount(0);
+  // Update downloads it again; Remove brings the offer back.
+  await row.getByRole('button', { name: 'Update' }).click();
+  await expect(page.locator('#foods-status')).toHaveText('Added 89,301 foods.');
+  await tab(page, 'today').click();
+  await page.locator('#open-add').click();
+  await page.locator('#food-search').fill('pumpernickel');
+  await expect(page.locator('.food-hit').first()).toContainText('Swiss products');
+  await page.keyboard.press('Escape');
+  await page.locator('#open-settings').click();
+  await page.locator('[data-source="offch"]').getByRole('button', { name: 'Remove' }).click();
+  await expect(page.locator('[data-source="offch"]')).toHaveCount(0);
+  await expect(page.locator('[data-offer="offch"]')).toBeVisible();
+});
